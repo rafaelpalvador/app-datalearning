@@ -1,4 +1,4 @@
-import { COURSES, findLesson, allLessons, TRACK_LEVELS, LEVEL_DESC } from './content/index.js';
+import { COURSES, findLesson, allLessons, TRACK_LEVELS, LEVEL_DESC, stepByRef, migrateRef } from './content/index.js';
 import { INTERVIEW, INTERVIEW_SQL, INTERVIEW_PY, LEVELS } from './content/interview.js';
 import { SCHEMA_DOC } from './content/datasets.js';
 import { withVariant } from './content/helpers.js';
@@ -160,10 +160,9 @@ function findUnit(unitId) {
   return null;
 }
 
-function itemFromRef(lessonId, stepIndex) {
-  const f = findLesson(lessonId);
-  const step = f?.lesson.steps[stepIndex];
-  return step ? { step, lessonId, stepIndex, courseId: f.course.id } : null;
+function itemFromRef(lessonId, ref) {
+  const f = stepByRef(lessonId, ref);
+  return f ? { step: f.step, lessonId, stepIndex: f.step.uid, courseId: f.course.id } : null;
 }
 
 // Próxima lição: segue a trilha estudada mais recentemente.
@@ -947,13 +946,13 @@ function startLesson(lessonId) {
   const { course, lesson } = found;
   if (!lessonUnlocked(course, lessonId)) { location.hash = `#/curso/${course.id}`; return; }
   const done = !!store.getState().completed[lessonId];
-  const items = lesson.steps.map((step, stepIndex) => ({ step: done ? withVariant(step) : step, lessonId, stepIndex, courseId: course.id }));
+  const items = lesson.steps.map((step) => ({ step: done ? withVariant(step) : step, lessonId, stepIndex: step.uid, courseId: course.id }));
   startSession({ title: lesson.title, items, mode: done ? 'practice' : 'lesson', lessonId, backHref: `#/curso/${course.id}` });
 }
 
 function startCheckpoint(unitId) {
   const { course, unit } = findUnit(unitId);
-  const pool = unit.lessons.flatMap((l) => l.steps.map((step, stepIndex) => ({ step: withVariant(step), lessonId: l.id, stepIndex, courseId: course.id })))
+  const pool = unit.lessons.flatMap((l) => l.steps.map((step) => ({ step: withVariant(step), lessonId: l.id, stepIndex: step.uid, courseId: course.id })))
     .filter((it) => EXERCISE_TYPES.has(it.step.type));
   const code = shuffle(pool.filter((it) => ['sql', 'python'].includes(it.step.type))).slice(0, 4);
   const rest = shuffle(pool.filter((it) => !['sql', 'python'].includes(it.step.type))).slice(0, 10 - code.length);
@@ -976,7 +975,7 @@ function startPractice(kind) {
     const done = Object.entries(s.completed).sort((a, b) => a[1].at - b[1].at).map(([id]) => id);
     const pool = [];
     for (const id of (done.length ? done : [allLessons(COURSES[0])[0].id])) {
-      findLesson(id)?.lesson.steps.forEach((step, stepIndex) => { if (EXERCISE_TYPES.has(step.type)) pool.push(itemFromRef(id, stepIndex)); });
+      findLesson(id)?.lesson.steps.forEach((step) => { if (EXERCISE_TYPES.has(step.type)) pool.push(itemFromRef(id, step.uid)); });
     }
     const seen = new Set(due.map((d) => `${d.lessonId}#${d.stepIndex}`));
     items = [...due.slice(0, 4), ...shuffle(pool.slice(0, 80)).filter((p) => !seen.has(`${p.lessonId}#${p.stepIndex}`))].slice(0, 8);
@@ -1553,6 +1552,7 @@ function viewProfile() {
                 try {
                   if (!await askConfirm('Substituir o progresso deste aparelho pelo do código?', { ok: 'Substituir', danger: true })) return;
                   store.importCode(ta.value);
+                  store.migrateStepRefs(migrateRef);
                   toast('Progresso importado');
                   viewProfile();
                 } catch (e) { toast(e.message, 'bad'); }
@@ -1616,6 +1616,10 @@ if (IS_DEMO && !store.getState().demoSeeded) {
   store.seedDemo(COURSES.map((c) => allLessons(c).map((l) => l.id)), INTERVIEW.map((p) => p.id));
   checkAchievements();
 }
+
+// Revisão espaçada e erros passam a usar o identificador estável dos exercícios
+// (e cartões que apontavam para cards de teoria, por causa da mudança de posição, saem da fila).
+store.migrateStepRefs(migrateRef);
 
 window.addEventListener('hashchange', route);
 route();

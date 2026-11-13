@@ -37,6 +37,9 @@ const mergeMaps = (...maps) => {
   for (const m of maps) for (const [k, v] of Object.entries(m || {})) out[k] = [...(out[k] || []), ...v];
   return out;
 };
+// Guarda a ordem original dos passos (a das versões até a 1.4) para migrar progresso antigo.
+for (const course of COURSES) for (const unit of course.units) for (const lesson of unit.lessons) lesson._legacySteps ??= lesson.steps.slice();
+
 const EXTRA_THEORY = mergeMaps(SQL_THEORY, PY_THEORY, STATS_THEORY, SQL_PLUS.examples, PY_PLUS.examples, STATS_PLUS.examples);
 for (const course of COURSES) {
   for (const unit of course.units) {
@@ -90,3 +93,48 @@ export const levelOfLesson = (lessonId) => {
   const f = findLesson(lessonId);
   return f ? TRACK_LEVELS.find((l) => l.id === f.unit.level) : null;
 };
+
+// Identificador estável de cada passo: não muda quando novos cards de teoria ou exemplos
+// entram na lição (antes, a revisão espaçada guardava a POSIÇÃO do passo, que mudava).
+const hashStr = (str) => { let h = 5381; for (let i = 0; i < str.length; i++) h = ((h << 5) + h + str.charCodeAt(i)) | 0; return (h >>> 0).toString(36); };
+for (const course of COURSES) {
+  for (const unit of course.units) {
+    for (const lesson of unit.lessons) {
+      const seen = new Map();
+      for (const step of lesson.steps) {
+        if (step.uid) continue;
+        const base = `${step.type[0]}${hashStr(`${step.type}|${step.prompt || step.question || step.title || ''}`)}`;
+        const n = seen.get(base) || 0;
+        seen.set(base, n + 1);
+        step.uid = n ? `${base}-${n}` : base;
+      }
+    }
+  }
+}
+
+const EXERCISE = new Set(['quiz', 'order', 'fill', 'sql', 'python']);
+
+/** Encontra o exercício de uma lição a partir da referência guardada no progresso. */
+export function stepByRef(lessonId, ref) {
+  const f = findLesson(lessonId);
+  if (!f) return null;
+  const step = f.lesson.steps.find((s) => s.uid === ref);
+  return step && EXERCISE.has(step.type) ? { ...f, step } : null;
+}
+
+/**
+ * Converte referências antigas (posição numérica do passo) para o identificador estável.
+ * Tenta primeiro a ordem original das lições (versões até a 1.4) e depois a atual.
+ * Devolve null se a referência não aponta para um exercício (o cartão é descartado).
+ */
+export function migrateRef(lessonId, ref) {
+  if (typeof ref === 'string' && !/^\d+$/.test(ref)) return stepByRef(lessonId, ref) ? ref : null;
+  const i = Number(ref);
+  const f = findLesson(lessonId);
+  if (!f) return null;
+  for (const list of [f.lesson._legacySteps, f.lesson.steps]) {
+    const step = list?.[i];
+    if (step && EXERCISE.has(step.type) && step.uid) return step.uid;
+  }
+  return null;
+}

@@ -45,8 +45,8 @@ function defaults() {
     dailyGoal: 30,
     completed: {},     // lessonId -> { at, stars, bestMistakes }
     checkpoints: {},   // unitId -> { at, score }
-    mistakes: [],      // [{ lessonId, stepIndex, at }]
-    srs: {},           // 'lessonId#stepIndex' -> { ease, interval, due, reps, lapses }
+    mistakes: [],      // [{ lessonId, stepIndex (identificador estável do passo), at }]
+    srs: {},           // 'lessonId#uid' -> { ease, interval, due, reps, lapses }
     interview: {},     // problemId -> { solvedAt, bestSecs, attempts }
     achievements: {},  // id -> timestamp
     history: {},       // 'AAAA-MM-DD' -> xp do dia
@@ -193,7 +193,7 @@ export function dueCards(now = Date.now()) {
     .sort((a, b) => a[1].due - b[1].due)
     .map(([key, c]) => {
       const i = key.lastIndexOf('#');
-      return { lessonId: key.slice(0, i), stepIndex: Number(key.slice(i + 1)), card: c };
+      return { lessonId: key.slice(0, i), stepIndex: key.slice(i + 1), card: c };
     });
 }
 
@@ -202,6 +202,38 @@ export function srsStrength(lessonIds) {
   const cards = Object.entries(getState().srs).filter(([k]) => lessonIds.includes(k.slice(0, k.lastIndexOf('#')))).map(([, c]) => c);
   if (!cards.length) return 0;
   return cards.reduce((a, c) => a + Math.min(1, (c.reps + 1) / 4) * (c.due > Date.now() ? 1 : 0.6), 0) / cards.length;
+}
+
+/**
+ * Atualiza as referências de revisão espaçada e de erros para o identificador estável
+ * dos passos e remove as que não apontam mais para um exercício.
+ * resolve(lessonId, ref) → novo ref (string) ou null.
+ */
+export function migrateStepRefs(resolve) {
+  const s = getState();
+  let changed = false;
+  const srs = {};
+  for (const [key, card] of Object.entries(s.srs)) {
+    const i = key.lastIndexOf('#');
+    const lessonId = key.slice(0, i);
+    const ref = resolve(lessonId, key.slice(i + 1));
+    if (!ref) { changed = true; continue; }
+    const nk = `${lessonId}#${ref}`;
+    if (nk !== key) changed = true;
+    // se dois cartões antigos caíram no mesmo exercício, fica o que vence primeiro
+    if (!srs[nk] || card.due < srs[nk].due) srs[nk] = card;
+  }
+  const seen = new Set();
+  const mistakes = [];
+  for (const m of s.mistakes) {
+    const ref = resolve(m.lessonId, String(m.stepIndex));
+    if (ref !== m.stepIndex) changed = true;
+    if (!ref || seen.has(`${m.lessonId}#${ref}`)) continue;
+    seen.add(`${m.lessonId}#${ref}`);
+    mistakes.push({ ...m, stepIndex: ref });
+  }
+  if (changed) { s.srs = srs; s.mistakes = mistakes; save(); }
+  return changed;
 }
 
 // ───────────── erros
