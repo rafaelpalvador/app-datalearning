@@ -15,7 +15,7 @@ import * as store from './state.js';
 export const PROVIDERS = {
   gemini: { name: 'Gemini', vendor: 'Google', kind: 'gemini', keyHint: 'AIza...', keyUrl: 'aistudio.google.com/apikey', modelPrefer: [/flash/, /pro/] },
   openai: { name: 'ChatGPT', vendor: 'OpenAI', kind: 'openai', base: 'https://api.openai.com/v1', keyHint: 'sk-...', keyUrl: 'platform.openai.com/api-keys', modelPrefer: [/^gpt.*mini/, /^gpt/] },
-  anthropic: { name: 'Claude', vendor: 'Anthropic', kind: 'anthropic', keyHint: 'sk-ant-...', keyUrl: 'console.anthropic.com', defaultModel: 'claude-opus-5-5' },
+  anthropic: { name: 'Claude', vendor: 'Anthropic', kind: 'anthropic', keyHint: 'sk-ant-...', keyUrl: 'platform.claude.com/settings/keys', defaultModel: 'claude-haiku-5-5' },
   openrouter: { name: 'OpenRouter', vendor: 'centenas de modelos', kind: 'openai', base: 'https://openrouter.ai/api/v1', keyHint: 'sk-or-...', keyUrl: 'openrouter.ai/keys', modelPrefer: [/gemini.*flash/, /gpt.*mini/, /claude/] },
   groq: { name: 'Groq', vendor: 'modelos abertos, muito rápido', kind: 'openai', base: 'https://api.groq.com/openai/v1', keyHint: 'gsk_...', keyUrl: 'console.groq.com/keys', modelPrefer: [/llama/, /qwen/] },
   mistral: { name: 'Mistral', vendor: 'Mistral AI', kind: 'openai', base: 'https://api.mistral.ai/v1', keyHint: 'chave da Mistral', keyUrl: 'console.mistral.ai/api-keys', modelPrefer: [/mistral-small/, /mistral-medium/, /mistral/] },
@@ -124,20 +124,25 @@ export async function testConnection(id) {
 let sdkPromise = null;
 const loadSdk = () => (sdkPromise ??= import('../vendor/anthropic-sdk.js'));
 
+// Modelos que aceitam o modelo de reserva no servidor (fallbacks). O Haiku não aceita:
+// mandar o parâmetro para ele faria a requisição falhar.
+const SUPPORTS_FALLBACK = /^claude-(fable-5-[12]|mythos-5-[12]|opus-5(-5)?|sonnet-5-5)$/;
+
 async function askAnthropic(messages, onText, signal) {
   const { Anthropic } = await loadSdk();
   const client = new Anthropic({ apiKey: keyOf('anthropic'), dangerouslyAllowBrowser: true });
+  const model = modelOf('anthropic') || PROVIDERS.anthropic.defaultModel;
   let text = '';
   try {
     const stream = client.beta.messages.stream(
       {
-        model: modelOf('anthropic') || 'claude-opus-5-5',
+        model,
         max_tokens: 16000,
         system: SYSTEM_PROMPT,
         cache_control: { type: 'ephemeral' },
-        output_config: { effort: 'low' }, // conversa de tutor: respostas rápidas
-        betas: ['server-side-fallback-2026-07-01'],
-        fallbacks: 'default', // se o modelo recusar por política, a API tenta o modelo de reserva
+        output_config: { effort: 'low' }, // conversa de tutor: respostas rápidas e baratas
+        // se o modelo recusar por política, a API tenta um modelo de reserva na mesma chamada
+        ...(SUPPORTS_FALLBACK.test(model) ? { betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default' } : {}),
         messages,
       },
       { signal },
