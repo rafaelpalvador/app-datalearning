@@ -64,8 +64,7 @@
         "nsis",
         "portable"
       ],
-      "icon": "assets/icon.png",
-      "artifactName": "DataLingo-${version}-windows-${arch}-${target}.${ext}"
+      "icon": "assets/icon.png"
     },
     "nsis": {
       "oneClick": false,
@@ -74,7 +73,8 @@
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "DataLingo",
-      "language": "1046"
+      "language": "1046",
+      "artifactName": "DataLingo-${version}-windows-instalador.${ext}"
     },
     "portable": {
       "artifactName": "DataLingo-${version}-windows-portable.${ext}"

@@ -38,7 +38,7 @@ por cima — o progresso é mantido.
 
 ## 🪟 Windows 11
 
-- **Instalador** (`DataLingo-x.y.z-windows-x64-nsis.exe`): dê dois cliques e siga o assistente. Cria atalho na área de trabalho e no menu Iniciar.
+- **Instalador** (`DataLingo-x.y.z-windows-instalador.exe`): dê dois cliques e siga o assistente. Cria atalho na área de trabalho e no menu Iniciar.
 - **Portátil** (`DataLingo-x.y.z-windows-portable.exe`): roda sem instalar (bom para pendrive ou PC do trabalho).
 
 Como o app não tem certificado de assinatura de código (custa caro), o **SmartScreen** pode avisar
