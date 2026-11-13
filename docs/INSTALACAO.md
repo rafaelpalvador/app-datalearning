@@ -54,6 +54,20 @@ por cima — o progresso é mantido.
 Como o app não tem certificado de assinatura de código (custa caro), o **SmartScreen** pode avisar
 "O Windows protegeu o computador": clique em **Mais informações → Executar assim mesmo**.
 
+### Atualizar o Windows
+
+**Dentro do app (a partir da 1.7.0):** o Datum procura versões novas sozinho ao abrir (e a cada 6 horas) e mostra um aviso.
+Também dá para buscar em **Perfil → Atualizações do app** ou no menu **Datum → Buscar atualizações** (tecla Alt mostra o menu).
+Na versão instalada, o botão **Atualizar agora** baixa o instalador, instala em segundo plano e reabre o app; o progresso é mantido.
+Na versão portátil, o botão abre a página de download.
+
+**Pelo terminal (PowerShell):**
+```powershell
+irm https://raw.githubusercontent.com/rafaelpalvador/app-datalearning/HEAD/scripts/atualizar-windows.ps1 | iex
+```
+O comando compara a versão instalada com a última Release, baixa o instalador, fecha o Datum, instala sem perguntas e abre o app de novo.
+Se o Datum ainda não estiver instalado, ele instala. Para forçar a reinstalação: `$env:DATUM_FORCAR = '1'` antes do comando.
+
 ## 🐧 Linux
 
 **AppImage** (qualquer distribuição):

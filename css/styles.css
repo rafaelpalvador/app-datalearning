@@ -515,3 +515,8 @@ details.panel ul { margin: 0; padding-left: 18px; display: flex; flex-direction:
 .stars svg { fill: currentColor; }
 .stars .off { color: var(--line-strong); }
 .stars .off svg { fill: none; }
+
+/* Aviso de atualização (desktop): fica até o aluno decidir, e os botões são clicáveis */
+.toast.update { pointer-events: auto; }
+.toast.update span { flex: 1; }
+.toast.update .icon-btn { color: var(--on-ink); }

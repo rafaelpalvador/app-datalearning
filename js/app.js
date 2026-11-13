@@ -1528,6 +1528,8 @@ function viewProfile() {
       })()),
       tutorSettings({ onDone: () => viewProfile() })),
 
+    updatesCard(),
+
     h('section', { class: 'card stack' },
       h('div', { class: 'card-title', style: { marginBottom: 0 } }, h('h3', {}, 'Backup e sincronização')),
       h('p', { class: 'small muted' }, 'Leve seu progresso do celular para o computador (ou o contrário): exporte o código num aparelho e importe no outro. As chaves das IAs não são incluídas.'),
@@ -1575,6 +1577,88 @@ async function unlockAll() {
   location.hash = '#/';
 }
 
+// ─────────────────────────────────────────── ATUALIZAÇÕES (app de desktop)
+const fmtMB = (b) => `${(b / 1048576).toFixed(1)} MB`;
+
+function updatesCard() {
+  const up = platform.desktopUpdates();
+  if (!up) return null;
+  const status = h('div', { class: 'stack', style: { gap: '10px' } });
+  const card = h('section', { class: 'card stack', id: 'atualizacoes' },
+    h('div', { class: 'card-title', style: { marginBottom: 0 } }, h('h3', {}, 'Atualizações do app'), h('span', { class: 'badge' }, `versão ${window.datalingoDesktop?.appVersion || '?'}`)),
+    h('p', { class: 'small muted' }, 'O Datum procura versões novas sozinho ao abrir. No Windows instalado, a atualização é baixada e instalada sem perder o progresso.'),
+    status);
+
+  const showInfo = (info) => {
+    if (info.error) return put(status, h('p', { class: 'small', style: { color: 'var(--bad)' } }, info.error), checkBtn());
+    if (!info.available) return put(status, h('p', { class: 'small' }, ic('check', 15), ` Você está na versão mais recente (${info.current}).`), checkBtn('Buscar de novo'));
+    const bar = h('div', { class: 'bar', style: { width: '0%' } });
+    const prog = h('div', { class: 'stack', style: { gap: '6px', display: 'none' } }, h('div', { class: 'progress' }, bar), h('span', { class: 'tiny faint' }));
+    const label = info.canInstall ? 'Atualizar agora' : info.portable ? 'Baixar a versão portátil nova' : 'Abrir a página de download';
+    const btn = h('button', {
+      class: 'btn primary sm',
+      onclick: async () => {
+        btn.disabled = true;
+        if (info.canInstall) {
+          prog.style.display = '';
+          const off = up.onProgress(({ p, got, total }) => {
+            bar.style.width = `${Math.round(p * 100)}%`;
+            prog.lastChild.textContent = total ? `Baixando ${fmtMB(got)} de ${fmtMB(total)}` : `Baixando ${fmtMB(got)}`;
+          });
+          const res = await up.install();
+          off();
+          if (res.installing) { prog.lastChild.textContent = 'Instalando... o Datum vai fechar e abrir de novo na versão nova.'; return; }
+          if (!res.ok) { toast(res.message || 'Não foi possível atualizar.', 'bad'); btn.disabled = false; prog.style.display = 'none'; }
+        } else {
+          await up.install();
+          btn.disabled = false;
+        }
+      },
+    }, ic('download', 15), label);
+    put(status,
+      h('div', { class: 'unlock', style: { margin: 0 } }, ic('spark', 18), h('span', {}, 'Nova versão disponível: ', h('strong', {}, info.latest), ` (você tem ${info.current})`)),
+      info.asset?.size && info.canInstall ? h('span', { class: 'tiny faint' }, `Download de ${fmtMB(info.asset.size)}`) : null,
+      h('div', { class: 'row' }, btn, h('button', { class: 'btn ghost sm', onclick: () => up.openPage() }, 'Ver novidades')),
+      prog);
+  };
+  function checkBtn(text = 'Buscar atualizações') {
+    return h('div', { class: 'row' }, h('button', {
+      class: 'btn sm',
+      onclick: async (e) => {
+        e.currentTarget.disabled = true;
+        put(status, h('p', { class: 'small faint loading' }, 'Procurando versões novas...'));
+        showInfo(await up.check());
+      },
+    }, ic('repeat', 15), text));
+  }
+  put(status, checkBtn());
+  if (pendingUpdate) showInfo(pendingUpdate);
+  return card;
+}
+
+let pendingUpdate = null;
+function setupDesktopUpdates() {
+  const up = platform.desktopUpdates();
+  if (!up) return;
+  const openPanel = () => {
+    navigate('#/perfil');
+    setTimeout(() => document.getElementById('atualizacoes')?.scrollIntoView({ behavior: 'smooth', block: 'center' }), 120);
+  };
+  up.onOpenPanel(openPanel);
+  up.onAvailable((info) => {
+    pendingUpdate = info;
+    let seen = null;
+    try { seen = localStorage.getItem('datum:update-avisada'); } catch { /* sem armazenamento */ }
+    if (seen === info.latest) return;
+    try { localStorage.setItem('datum:update-avisada', info.latest); } catch { /* sem armazenamento */ }
+    const t = h('div', { class: 'toast update', role: 'status' }, ic('spark', 18),
+      h('span', {}, `Datum ${info.latest} disponível. `),
+      h('button', { class: 'btn sm primary', style: { marginLeft: '8px' }, onclick: () => { t.remove(); openPanel(); } }, 'Atualizar'),
+      h('button', { class: 'icon-btn', 'aria-label': 'Fechar', onclick: () => t.remove() }, ic('x', 16)));
+    toastBox.append(t);
+  });
+}
+
 // ─────────────────────────────────────────── ROTEADOR
 document.addEventListener('keydown', (e) => keyHandler?.(e));
 
@@ -1620,6 +1704,7 @@ if (IS_DEMO && !store.getState().demoSeeded) {
 // Revisão espaçada e erros passam a usar o identificador estável dos exercícios
 // (e cartões que apontavam para cards de teoria, por causa da mudança de posição, saem da fila).
 store.migrateStepRefs(migrateRef);
+setupDesktopUpdates();
 
 window.addEventListener('hashchange', route);
 route();

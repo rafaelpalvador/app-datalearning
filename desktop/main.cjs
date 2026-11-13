@@ -4,6 +4,7 @@
 const { app, BrowserWindow, protocol, shell, Menu, nativeTheme } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
+const updater = require('./updater.cjs');
 
 const ROOT = path.join(__dirname, '..');
 const SCHEME = 'app';
@@ -83,11 +84,12 @@ app.whenReady().then(() => {
   });
 
   Menu.setApplicationMenu(Menu.buildFromTemplate([
-    { label: 'Datum', submenu: [{ role: 'reload', label: 'Recarregar' }, { role: 'toggleDevTools', label: 'Ferramentas do desenvolvedor' }, { type: 'separator' }, { role: 'quit', label: 'Sair' }] },
+    { label: 'Datum', submenu: [{ label: 'Buscar atualizações', click: () => { win?.webContents.send('update:open-panel'); } }, { type: 'separator' }, { role: 'reload', label: 'Recarregar' }, { role: 'toggleDevTools', label: 'Ferramentas do desenvolvedor' }, { type: 'separator' }, { role: 'quit', label: 'Sair' }] },
     { label: 'Editar', submenu: [{ role: 'undo', label: 'Desfazer' }, { role: 'redo', label: 'Refazer' }, { type: 'separator' }, { role: 'cut', label: 'Recortar' }, { role: 'copy', label: 'Copiar' }, { role: 'paste', label: 'Colar' }, { role: 'selectAll', label: 'Selecionar tudo' }] },
     { label: 'Exibir', submenu: [{ role: 'resetZoom', label: 'Tamanho original' }, { role: 'zoomIn', label: 'Aumentar' }, { role: 'zoomOut', label: 'Diminuir' }, { type: 'separator' }, { role: 'togglefullscreen', label: 'Tela cheia' }] },
   ]));
 
+  updater.setup(() => win);
   createWindow();
   app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); });
 });

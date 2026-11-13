@@ -6,6 +6,8 @@ const cap = () => window.Capacitor;
 export const isNative = () => !!cap()?.isNativePlatform?.();
 export const isAndroid = () => cap()?.getPlatform?.() === 'android';
 export const isDesktop = () => !!window.datalingoDesktop;
+// Atualizações (só no app de desktop): check, install, openPage, onAvailable, onProgress, onOpenPanel
+export const desktopUpdates = () => window.datalingoDesktop?.updates || null;
 export const platformName = () => (isAndroid() ? 'android' : isDesktop() ? 'desktop' : 'web');
 const plugin = (name) => (isNative() ? cap().Plugins?.[name] : null);
 
