@@ -5,7 +5,7 @@ import { withVariant } from './content/helpers.js';
 import * as store from './state.js';
 import { renderMarkdown, inline, esc, highlight } from './markdown.js';
 import { freshDb, runQuery, evaluateSql, initSql, createDb, friendlySqlError } from './engines/sql-engine.js';
-import { runPython, friendlyPyError } from './engines/python-engine.js';
+import { runPython, friendlyPyError, cancelPython } from './engines/python-engine.js';
 import { dailyMissions, settleMissions, checkAchievements, ACHIEVEMENTS, MISSION_REWARD } from './gamification.js';
 import { askTutor, tutorMode, contextFromStep, isDemoRuntime, PROVIDERS, PROVIDER_ORDER, keyOf, modelOf, baseUrlOf, isConfigured, listModels, pickModel, testConnection, activeLabel, tutorConfig } from './tutor.js';
 import { icon } from './icons.js';
@@ -85,6 +85,13 @@ function toast(text, kind = '', iconName = 'check') {
 
 let keyHandler = null;
 let overlayClose = null; // fecha o diálogo/gaveta aberto (Esc e botão voltar do Android)
+
+// Navega para um endereço; se já estivermos nele, redesenha a tela mesmo assim
+// (sem isso o X da lição não fazia nada quando a sessão começava na própria tela de volta).
+function navigate(href) {
+  if (location.hash === href || (href === '#/' && !location.hash)) route();
+  else location.hash = href;
+}
 
 function askConfirm(message, { ok = 'Confirmar', danger = false } = {}) {
   return new Promise((resolve) => {
@@ -710,7 +717,7 @@ function startSession({ title, items, mode, lessonId, unitId, interview, backHre
     if (completedCount === 0 || await askConfirm('Sair agora? O progresso desta sessão será perdido.', { ok: 'Sair', danger: true })) {
       clearInterval(timerId);
       activeSession = null;
-      location.hash = backHref;
+      navigate(backHref);
     }
   };
   activeSession = { exit };
@@ -925,10 +932,10 @@ function startSession({ title, items, mode, lessonId, unitId, interview, backHre
       missions.map((m) => h('div', { class: 'unlock' }, ic('check', 18), `Missão cumprida: ${m.text} (+${MISSION_REWARD} XP)`)),
       awards.map((a) => h('div', { class: 'unlock' }, ic(a.icon, 18), h('span', {}, 'Conquista: ', h('strong', {}, a.title)))),
       conceptCard,
-      h('div', { class: 'row' }, h('button', { class: 'btn primary', onclick: () => { location.hash = backHref; } }, 'Continuar'), nextAction),
+      h('div', { class: 'row' }, h('button', { class: 'btn primary', onclick: () => navigate(backHref) }, 'Continuar'), nextAction),
     )));
     window.scrollTo(0, 0);
-    keyHandler = (e) => { if (e.key === 'Enter' && document.activeElement?.tagName !== 'BUTTON') location.hash = backHref; };
+    keyHandler = (e) => { if (e.key === 'Enter' && document.activeElement?.tagName !== 'BUTTON') navigate(backHref); };
   }
 
   showStep();
@@ -1116,7 +1123,8 @@ function viewDoubts() {
         h('div', { class: 'small muted', html: snippet(it.md, q) })))
         : h('div', { class: 'result', style: { cursor: 'default' } }, h('span', { class: 'muted' }, 'Nada encontrado na teoria. Pergunte ao tutor abaixo.'))));
   };
-  input.addEventListener('input', runSearch);
+  let searchTimer = null;
+  input.addEventListener('input', () => { clearTimeout(searchTimer); searchTimer = setTimeout(runSearch, 150); });
 
   page('doubts',
     pageHead('Dúvidas', 'Tire suas dúvidas', 'Busque em toda a teoria das trilhas e nas explicações das entrevistas, ou converse com o tutor de IA.'),
@@ -1571,6 +1579,7 @@ async function unlockAll() {
 document.addEventListener('keydown', (e) => keyHandler?.(e));
 
 function route() {
+  cancelPython();
   keyHandler = null;
   footerReady = () => {};
   activeSession = null;
@@ -1610,3 +1619,9 @@ if (IS_DEMO && !store.getState().demoSeeded) {
 
 window.addEventListener('hashchange', route);
 route();
+
+// Prepara o SQLite e o índice de busca em segundo plano, quando o app estiver ocioso,
+// para o primeiro exemplo/exercício e a primeira busca não darem um "soluço".
+const whenIdle = window.requestIdleCallback || ((fn) => setTimeout(fn, 1500));
+whenIdle(() => { initSql().then((SQL) => createDb(SQL).close()).catch(() => {}); });
+whenIdle(() => { try { buildIndex(); } catch { /* índice é montado sob demanda */ } });

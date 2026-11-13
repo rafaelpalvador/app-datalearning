@@ -18,10 +18,19 @@ export async function freshDb() {
   return createDb(SQL);
 }
 
+// Montar o banco com os INSERTs leva ~15 ms (bem mais no celular), e isso acontecia
+// a cada execução. Monta uma vez, guarda os bytes e cria cópias instantâneas (~0,2 ms).
+const baseBytes = new WeakMap();
 export function createDb(SQL) {
-  const db = new SQL.Database();
-  db.run(DB_SQL);
-  return db;
+  let bytes = baseBytes.get(SQL);
+  if (!bytes) {
+    const db = new SQL.Database();
+    db.run(DB_SQL);
+    bytes = db.export();
+    db.close();
+    baseBytes.set(SQL, bytes);
+  }
+  return new SQL.Database(bytes);
 }
 
 // Executa e devolve o resultado do ÚLTIMO comando que retornou linhas.

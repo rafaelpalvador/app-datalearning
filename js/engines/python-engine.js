@@ -109,14 +109,113 @@ export function friendlyPyError(msg) {
 
 /**
  * Executa código Python.
+ * Por padrão roda num Web Worker (a interface não trava e um laço infinito pode ser
+ * interrompido). Se o Worker não estiver disponível, roda na linha principal.
  * @param {object} opts { setup, code, tests, packages, onStatus }
  * @returns {Promise<{ok, stdout, error, value, figures, testError}>}
  */
-export async function runPython({ setup = '', code = '', tests = '', packages = [], onStatus = () => {} }) {
+export async function runPython(opts) {
+  if (!workerBroken && typeof Worker !== 'undefined' && !window.DATALINGO_DEMO) {
+    try {
+      return await enqueue(() => runInWorker(opts));
+    } catch (e) {
+      if (!(e instanceof WorkerUnavailable)) throw e;
+      workerBroken = true;   // ex.: protocolo que não permite Workers → usa a linha principal
+    }
+  }
+  return runOnMainThread(opts);
+}
+
+// Tempo máximo de EXECUÇÃO (depois que o Python e as bibliotecas já carregaram).
+const EXEC_TIMEOUT_MS = 30000;
+class WorkerUnavailable extends Error {}
+let worker = null;
+let workerBroken = false;
+let workerReady = false;      // já respondeu alguma vez (o Pyodide carregou)
+let jobSeq = 0;
+let pending = null;           // { id, resolve, reject, onStatus, timer }
+let chain = Promise.resolve();
+
+function enqueue(fn) {
+  const next = chain.then(fn, fn);
+  chain = next.catch(() => {});
+  return next;
+}
+
+function killWorker() {
+  if (worker) worker.terminate();
+  worker = null;
+  workerReady = false;
+}
+
+function getWorker() {
+  if (worker) return worker;
+  worker = new Worker(new URL('./python-worker.js', import.meta.url));
+  worker.onmessage = (e) => {
+    const { id, status, result } = e.data;
+    if (!pending || pending.id !== id) return;
+    if (status) {
+      if (status === 'Executando...') {
+        workerReady = true;
+        clearTimeout(pending.timer);
+        const job = pending;
+        job.timer = setTimeout(() => {
+          if (pending !== job) return;
+          killWorker();
+          pending = null;
+          job.resolve({ ok: false, stdout: '', error: `O código passou de ${EXEC_TIMEOUT_MS / 1000} segundos e foi interrompido. Confira se há um laço infinito (um while cuja condição nunca fica falsa).`, figures: [] });
+        }, EXEC_TIMEOUT_MS);
+      }
+      pending.onStatus(status);
+      return;
+    }
+    clearTimeout(pending.timer);
+    const job = pending;
+    pending = null;
+    job.resolve(result);
+  };
+  worker.onerror = (e) => {
+    e.preventDefault?.();
+    const job = pending;
+    pending = null;
+    const neverWorked = !workerReady;
+    killWorker();
+    if (job) {
+      clearTimeout(job.timer);
+      if (neverWorked) job.reject(new WorkerUnavailable(e.message || 'worker'));
+      else job.resolve({ ok: false, stdout: '', error: 'O Python foi reiniciado após um erro interno. Execute de novo.', figures: [] });
+    }
+  };
+  return worker;
+}
+
+async function runInWorker({ setup = '', code = '', tests = '', packages = [], onStatus = () => {} }) {
+  const base = await resolvePyodideUrl();
+  if (!workerReady) onStatus(base === CDN_URL ? 'Baixando o Python (só na primeira vez, ~10 MB)...' : 'Iniciando o Python...');
+  return new Promise((resolve, reject) => {
+    let w;
+    try { w = getWorker(); } catch (e) { reject(new WorkerUnavailable(e.message)); return; }
+    const id = ++jobSeq;
+    pending = { id, resolve, reject, onStatus, timer: null };
+    w.postMessage({ id, base, setup, code, tests, packages });
+  });
+}
+
+/** Interrompe uma execução em andamento (ex.: ao sair da lição). */
+export function cancelPython() {
+  if (!pending) return;
+  const job = pending;
+  pending = null;
+  clearTimeout(job.timer);
+  killWorker();
+  job.resolve({ ok: false, stdout: '', error: 'Execução interrompida.', figures: [] });
+}
+
+async function runOnMainThread({ setup = '', code = '', tests = '', packages = [], onStatus = () => {} }) {
   const pyodide = await initPython(onStatus);
   const stdout = [];
-  pyodide.setStdout({ batched: (s) => stdout.push(s) });
-  pyodide.setStderr({ batched: (s) => stdout.push(s) });
+  pyodide.setStdout({ batched: (s) => { if (!s.startsWith('Matplotlib is building the font cache')) stdout.push(s); } });
+  pyodide.setStderr({ batched: (s) => { if (!s.startsWith('Matplotlib is building the font cache')) stdout.push(s); } });
 
   try {
     onStatus('Carregando bibliotecas...');
