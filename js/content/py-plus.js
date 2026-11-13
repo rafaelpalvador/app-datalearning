@@ -884,6 +884,10 @@ A **semente** torna a análise reproduzível: outra pessoa (ou você amanhã) ob
 | \`np.isnan\`, \`np.nanmean\` | lidar com NaN |
 | \`np.clip(x, 0, 100)\` | limitar a uma faixa |
 | \`np.round(x, 2)\` | arredondar |
+| \`np.asarray(x, dtype=float)\` | converte listas/Series em array (sem copiar se já for array) |
+| \`np.array_split(x, k)\` | divide em k pedaços de tamanhos quase iguais |
+| \`np.setdiff1d(a, b)\` | elementos de a que não estão em b |
+| \`np.concatenate([a, b])\` | junta arrays |
 
 **Álgebra linear** (base de regressão e PCA):
 
@@ -895,6 +899,7 @@ A.T                      # transposta
 np.linalg.inv(A)         # inversa
 np.linalg.solve(A, b)    # resolve A·x = b (melhor que usar a inversa)
 np.linalg.eig(A)         # autovalores e autovetores
+np.linalg.eigh(A)        # idem, para matrizes simétricas (covariância); eigvalsh só os autovalores
 ~~~
 `),
     exPy('Simulação: lançando dados', `

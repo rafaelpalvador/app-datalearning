@@ -29,6 +29,12 @@ Organizadas por impacto. ⭐ = recomendo priorizar. ✅ = já implementado (v1.1
 - Teoria completa antes de toda prática: cada lição ganhou cards de aprofundamento (sintaxe, exemplos, erros comuns) e nenhum exercício cobra algo ainda não explicado
 - Auditoria automática (`scripts/audit-theory.mjs`) no `npm run validate`: o build falha se um exercício usar um comando ou função que a teoria anterior não explicou
 
+## ✅ Implementado na v1.6
+- Exemplos resolvidos executáveis (código + resultado real) em todas as lições, antes das perguntas
+- 36 lições novas: introdução a bancos de dados e a Python, textos, funções, arquivos e regex, NumPy aleatório e álgebra linear, índices e janelas no pandas, gráficos estatísticos, SciPy/statsmodels/scikit-learn, funções de texto, JOINs completos, operações de conjunto, funções de janela de distribuição, modelagem dimensional, qualidade de dados
+- Estatística completa: amostragem e vieses, forma da distribuição, regras de probabilidade e contagem, variáveis aleatórias, Poisson/exponencial e outras distribuições, LGN e TCL, estimadores e t, testes t e tamanho de efeito, diagnóstico de regressão, ARIMA e suavização, não paramétricos, viés-variância e validação cruzada, métricas de classificação, regularização, PCA, k-means e RFM, RDD/VI/controle sintético, método delta, coortes e LTV, controle estatístico de processo
+- Currículo de referência em `docs/CURRICULO-COMPLETO.md`
+
 ## Próximos passos sugeridos
 2. **Contas + backend** (sincronização automática, ligas semanais reais, amigos)
 3. **PostgreSQL e DuckDB** no app, além do SQLite
