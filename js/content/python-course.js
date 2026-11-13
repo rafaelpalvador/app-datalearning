@@ -718,9 +718,6 @@ ax.set_title("Receita por categoria")`,
               r`assert ax.get_title() == "Receita por categoria"
 assert len(ax.patches) == 4, "Esperava 4 barras (uma por categoria)"`,
               { setup: PY_VENDAS, packages: [...PD, 'matplotlib'], starter: 'import matplotlib.pyplot as plt\n' }),
-            quiz('Qual gráfico é mais adequado para mostrar a evolução da receita ao longo dos meses?', ['Pizza', 'Linha', 'Dispersão', 'Boxplot'], 1),
-            quiz('Para comparar a distribuição de valores entre categorias (mediana, quartis, outliers), use...', ['Gráfico de pizza', 'Boxplot', 'Gráfico de área', 'Tabela'], 1),
-            quiz('Qual biblioteca você escolheria para um gráfico interativo com zoom e tooltip?', ['matplotlib', 'plotly', 'NumPy', 'BeautifulSoup'], 1),
             theory('Boas práticas de visualização', `
 - **Comece pela pergunta**: comparação → barras; tendência → linha; distribuição → histograma/boxplot; relação → dispersão; composição → barras empilhadas (evite pizza com muitas fatias)
 - **Eixo Y começando em zero** em gráficos de barras
@@ -739,6 +736,9 @@ import plotly.express as px
 px.line(df_mes, x="mes", y="receita", title="Receita mensal").show()
 ~~~
 `),
+            quiz('Qual gráfico é mais adequado para mostrar a evolução da receita ao longo dos meses?', ['Pizza', 'Linha', 'Dispersão', 'Boxplot'], 1),
+            quiz('Para comparar a distribuição de valores entre categorias (mediana, quartis, outliers), use...', ['Gráfico de pizza', 'Boxplot', 'Gráfico de área', 'Tabela'], 1),
+            quiz('Qual biblioteca você escolheria para um gráfico interativo com zoom e tooltip?', ['matplotlib', 'plotly', 'NumPy', 'BeautifulSoup'], 1),
           ],
         },
       ],

@@ -1,8 +1,35 @@
 import { SQL_COURSE } from './sql-course.js';
 import { PYTHON_COURSE } from './python-course.js';
 import { STATS_COURSE } from './stats-course.js';
+import { SQL_THEORY } from './theory-sql.js';
+import { PY_THEORY } from './theory-python.js';
+import { STATS_THEORY } from './theory-stats.js';
 
 export const COURSES = [SQL_COURSE, PYTHON_COURSE, STATS_COURSE];
+
+// Teoria antes da prática: os cards de aprofundamento entram logo depois da teoria
+// de abertura da lição, antes do primeiro exercício. Um card com { before: n } entra
+// antes do passo n (índice original), para explicar um exercício do meio da lição.
+const EXTRA_THEORY = { ...SQL_THEORY, ...PY_THEORY, ...STATS_THEORY };
+for (const course of COURSES) {
+  for (const unit of course.units) {
+    for (const lesson of unit.lessons) {
+      const extra = EXTRA_THEORY[lesson.id];
+      if (!extra || lesson._theoryMerged) continue;
+      const original = lesson.steps;
+      const firstEx = original.findIndex((s) => s.type !== 'theory');
+      const at = (card) => (card.before ?? (firstEx < 0 ? original.length : firstEx));
+      const steps = [];
+      original.forEach((step, i) => {
+        for (const card of extra) if (at(card) === i) steps.push(card);
+        steps.push(step);
+      });
+      for (const card of extra) if (at(card) >= original.length) steps.push(card);
+      lesson.steps = steps;
+      lesson._theoryMerged = true;
+    }
+  }
+}
 
 export function findLesson(lessonId) {
   for (const course of COURSES) {

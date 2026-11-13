@@ -25,6 +25,10 @@ Organizadas por impacto. ⭐ = recomendo priorizar. ✅ = já implementado (v1.1
 - Estatística do básico ao especialista (35 lições) e 4 níveis em todas as trilhas
 - Tutor com qualquer IA: Gemini, ChatGPT, Claude, OpenRouter, Groq, Mistral, DeepSeek, Ollama e APIs compatíveis com a OpenAI
 
+## ✅ Implementado na v1.5
+- Teoria completa antes de toda prática: cada lição ganhou cards de aprofundamento (sintaxe, exemplos, erros comuns) e nenhum exercício cobra algo ainda não explicado
+- Auditoria automática (`scripts/audit-theory.mjs`) no `npm run validate`: o build falha se um exercício usar um comando ou função que a teoria anterior não explicou
+
 ## Próximos passos sugeridos
 2. **Contas + backend** (sincronização automática, ligas semanais reais, amigos)
 3. **PostgreSQL e DuckDB** no app, além do SQLite
