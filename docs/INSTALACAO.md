@@ -16,8 +16,16 @@ Cada vez que o código é enviado ao GitHub, o **GitHub Actions** compila os app
 
 Os artifacts vêm dentro de um `.zip` — extraia antes de instalar.
 
-Para gerar uma **versão oficial** com página de download fixa, crie uma tag: `git tag v1.1.0 && git push origin v1.1.0`.
-Os arquivos aparecem em **Releases**.
+**Versões oficiais (Releases):** cada vez que o código é enviado, o GitHub Actions publica (ou atualiza)
+a Release `v<versão>` usando a versão do `package.json`. Para lançar uma versão nova, aumente `"version"`
+no `package.json` (ex.: `1.1.0` → `1.2.0`). Página: https://github.com/rafaelpalvador/app-datalearning/releases
+
+### Atualizações automáticas com o Obtainium (Android)
+
+1. Instale o [Obtainium](https://github.com/ImranR98/Obtainium) no celular.
+2. Toque em **Adicionar app** e cole: `https://github.com/rafaelpalvador/app-datalearning`
+3. Toque em **Adicionar**. O Obtainium encontra o `.apk` da Release mais recente e instala.
+4. A cada versão nova, ele avisa e atualiza (o progresso é mantido, a assinatura é sempre a mesma).
 
 ## 📱 Android — Honor 400 Pro (MagicOS 9 / Android 15)
 
