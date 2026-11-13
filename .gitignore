@@ -1,2 +1,6 @@
 node_modules/
 scripts/.python-steps.json
+.cache/
+vendor/pyodide/
+dist/
+release/

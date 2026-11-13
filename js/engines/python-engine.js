@@ -2,9 +2,21 @@
 // matplotlib, BeautifulSoup, sqlite3... tudo rodando no navegador do aluno.
 
 const PYODIDE_VERSION = '0.27.2';
-// Pode ser sobrescrito para hospedar o Pyodide você mesmo (ex.: uso offline):
-//   <script>window.DATALINGO_PYODIDE_URL = '/pyodide/';</script>
-const PYODIDE_URL = window.DATALINGO_PYODIDE_URL || `https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/full/`;
+const CDN_URL = `https://cdn.jsdelivr.net/pyodide/v${PYODIDE_VERSION}/full/`;
+const LOCAL_URL = new URL('../../vendor/pyodide/', import.meta.url).href;
+
+// Ordem de preferência:
+//  1. window.DATALINGO_PYODIDE_URL (hospedagem própria)
+//  2. vendor/pyodide/ (incluído nos apps de desktop e Android → funciona offline)
+//  3. CDN do jsDelivr (versão web)
+async function resolvePyodideUrl() {
+  if (window.DATALINGO_PYODIDE_URL) return window.DATALINGO_PYODIDE_URL;
+  try {
+    const r = await fetch(`${LOCAL_URL}pyodide.js`, { method: 'HEAD' });
+    if (r.ok) return LOCAL_URL;
+  } catch { /* sem cópia local */ }
+  return CDN_URL;
+}
 
 let pyodidePromise = null;
 
@@ -53,9 +65,10 @@ export function isPythonLoaded() {
 export function initPython(onStatus = () => {}) {
   if (!pyodidePromise) {
     pyodidePromise = (async () => {
-      onStatus('Baixando o Python (só na primeira vez, ~10 MB)...');
-      await loadScript(`${PYODIDE_URL}pyodide.js`);
-      const pyodide = await window.loadPyodide({ indexURL: PYODIDE_URL });
+      const base = await resolvePyodideUrl();
+      onStatus(base === CDN_URL ? 'Baixando o Python (só na primeira vez, ~10 MB)...' : 'Iniciando o Python...');
+      await loadScript(`${base}pyodide.js`);
+      const pyodide = await window.loadPyodide({ indexURL: base });
       await pyodide.runPythonAsync(HELPERS);
       return pyodide;
     })().catch((e) => {
@@ -72,6 +85,22 @@ function cleanError(e) {
   const lines = msg.trim().split('\n');
   const idx = lines.findIndex((l) => l.includes('File "<exec>"'));
   return (idx >= 0 ? lines.slice(idx) : lines.slice(-4)).join('\n');
+}
+
+// Traduz erros comuns do Python em dicas para iniciantes.
+export function friendlyPyError(msg) {
+  const m = String(msg || '');
+  let x;
+  if ((x = m.match(/NameError: name '([^']+)' is not defined/))) return `<code>${x[1]}</code> não foi definido. Confira se o nome está igual ao do enunciado e se você importou a biblioteca (ex.: <code>import pandas as pd</code>).`;
+  if ((x = m.match(/KeyError: '?([^'\n]+)'?/))) return `A chave/coluna <code>${x[1]}</code> não existe. Confira maiúsculas, acentos e o nome exato da coluna.`;
+  if (/IndentationError|unexpected indent|expected an indented block/.test(m)) return 'Problema de <b>indentação</b>: o Python usa espaços para definir blocos (4 espaços dentro de def/if/for).';
+  if (/SyntaxError/.test(m)) return 'Erro de sintaxe: confira parênteses, aspas, vírgulas e os dois-pontos depois de def/if/for.';
+  if (/The truth value of a Series is ambiguous/.test(m)) return 'No pandas, combine condições com <code>&</code> (e) e <code>|</code> (ou), com parênteses em cada uma — <code>and</code>/<code>or</code> não funcionam com Series.';
+  if (/AttributeError: '(\w+)' object has no attribute '(\w+)'/.test(m)) { x = m.match(/'(\w+)' object has no attribute '(\w+)'/); return `Objetos <code>${x[1]}</code> não têm <code>.${x[2]}</code>. Confira o tipo da variável e o nome do método.`; }
+  if (/TypeError: unsupported operand/.test(m)) return 'Operação entre tipos incompatíveis (ex.: texto + número). Converta com <code>int()</code>, <code>float()</code> ou <code>.astype()</code>.';
+  if (/ZeroDivisionError/.test(m)) return 'Divisão por zero.';
+  if (/ModuleNotFoundError/.test(m)) return 'Essa biblioteca não está disponível aqui.';
+  return '';
 }
 
 /**

@@ -1,0 +1,121 @@
+name: Build apps (Android, Windows, Linux)
+
+on:
+  push:
+    branches: ['**']
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    name: Validar conteúdo
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - run: npm ci
+      - run: pip install pandas numpy matplotlib beautifulsoup4
+      - run: npm run validate
+
+  pyodide:
+    name: Baixar Python offline
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/cache@v4
+        with:
+          path: vendor/pyodide
+          key: pyodide-${{ hashFiles('scripts/fetch-pyodide.mjs') }}
+      - run: node scripts/fetch-pyodide.mjs
+      - uses: actions/upload-artifact@v4
+        with: { name: pyodide, path: vendor/pyodide, retention-days: 1 }
+
+  android:
+    name: Android (APK)
+    needs: [validate, pyodide]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '21', cache: gradle }
+      - uses: actions/download-artifact@v4
+        with: { name: pyodide, path: vendor/pyodide }
+      - run: npm ci
+      - run: npm run build:web && npx cap sync android
+      - name: Chave privada (opcional, via secrets)
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        if: env.KEYSTORE_B64 != ''
+        run: |
+          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          echo "ANDROID_KEYSTORE_FILE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+      - name: Compilar APK
+        working-directory: android
+        env:
+          VERSION_CODE: ${{ github.run_number }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          export VERSION_NAME=$(node -p "require('../package.json').version")
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon
+          mkdir -p ../release
+          cp app/build/outputs/apk/release/app-release.apk "../release/DataLingo-$VERSION_NAME-android.apk"
+      - uses: actions/upload-artifact@v4
+        with: { name: DataLingo-Android, path: release/*.apk }
+
+  windows:
+    name: Windows 11 (instalador + portátil)
+    needs: [validate, pyodide]
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - uses: actions/download-artifact@v4
+        with: { name: pyodide, path: vendor/pyodide }
+      - run: npm ci
+      - run: npx electron-builder --win nsis portable --x64 --publish never
+      - uses: actions/upload-artifact@v4
+        with: { name: DataLingo-Windows, path: release/*.exe }
+
+  linux:
+    name: Linux (AppImage + .deb)
+    needs: [validate, pyodide]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - uses: actions/download-artifact@v4
+        with: { name: pyodide, path: vendor/pyodide }
+      - run: npm ci
+      - run: npx electron-builder --linux AppImage deb --x64 --publish never
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DataLingo-Linux
+          path: |
+            release/*.AppImage
+            release/*.deb
+
+  release:
+    name: Publicar release
+    needs: [android, windows, linux]
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { pattern: DataLingo-*, merge-multiple: true, path: dist }
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: dist/*
+          generate_release_notes: true

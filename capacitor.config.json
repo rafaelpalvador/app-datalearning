@@ -1,0 +1,20 @@
+{
+  "appId": "app.datalingo.mobile",
+  "appName": "DataLingo",
+  "webDir": "dist",
+  "backgroundColor": "#58cc02",
+  "android": {
+    "adjustMarginsForEdgeToEdge": "auto",
+    "allowMixedContent": false,
+    "webContentsDebuggingEnabled": false
+  },
+  "plugins": {
+    "LocalNotifications": {
+      "smallIcon": "ic_stat_datalingo",
+      "iconColor": "#58cc02"
+    },
+    "StatusBar": {
+      "overlaysWebView": false
+    }
+  }
+}

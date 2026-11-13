@@ -1,4 +1,4 @@
-import { theory, quiz, order, fill, sql } from './helpers.js';
+import { theory, quiz, order, fill, sql, debugSql } from './helpers.js';
 
 export const SQL_COURSE = {
   id: 'sql',
@@ -98,7 +98,10 @@ LIMIT 3;              -- apenas as 3 primeiras linhas
 > Em SQL Server o equivalente de LIMIT é \`SELECT TOP 3 ...\`; no Oracle, \`FETCH FIRST 3 ROWS ONLY\`.
 `),
             sql('Liste nome e preço dos **3 produtos mais caros**, do mais caro para o mais barato.',
-              'SELECT nome, preco FROM produtos ORDER BY preco DESC LIMIT 3;', { ordered: true }),
+              'SELECT nome, preco FROM produtos ORDER BY preco DESC LIMIT 3;', { ordered: true, variants: [
+                { prompt: 'Liste nome e preço dos **2 produtos mais baratos**, do mais barato para o mais caro.', solution: 'SELECT nome, preco FROM produtos ORDER BY preco ASC LIMIT 2;' },
+                { prompt: 'Liste nome e estoque dos **4 produtos com mais estoque**, do maior para o menor.', solution: 'SELECT nome, estoque FROM produtos ORDER BY estoque DESC LIMIT 4;' },
+              ] }),
             sql('Liste os **estados distintos** onde há clientes.', 'SELECT DISTINCT estado FROM clientes;'),
             sql('Liste nome, categoria e preço dos produtos ordenados por **categoria (A→Z)** e, dentro de cada categoria, pelo **preço do maior para o menor**.',
               'SELECT nome, categoria, preco FROM produtos ORDER BY categoria ASC, preco DESC;', { ordered: true }),
@@ -133,7 +136,10 @@ WHERE preco > 1000;
 
 Textos e datas vão entre **aspas simples**: \`WHERE status = 'entregue'\`.
 `),
-            sql('Liste nome e preço dos produtos que custam **mais de 1000**.', 'SELECT nome, preco FROM produtos WHERE preco > 1000;'),
+            sql('Liste nome e preço dos produtos que custam **mais de 1000**.', 'SELECT nome, preco FROM produtos WHERE preco > 1000;', { variants: [
+              { prompt: 'Liste nome e preço dos produtos que custam **menos de 150**.', solution: 'SELECT nome, preco FROM produtos WHERE preco < 150;' },
+              { prompt: 'Liste nome e estoque dos produtos com **estoque de pelo menos 100**.', solution: 'SELECT nome, estoque FROM produtos WHERE estoque >= 100;' },
+            ] }),
             sql('Liste todos os pedidos (todas as colunas) com status **entregue**.', "SELECT * FROM pedidos WHERE status = 'entregue';"),
             fill('Complete para listar produtos sem estoque:', 'SELECT nome FROM produtos ___ estoque ___ 0;', [['WHERE'], ['=']]),
             quiz('Qual consulta está correta?', [
@@ -143,6 +149,9 @@ Textos e datas vão entre **aspas simples**: \`WHERE status = 'entregue'\`.
               "SELECT * FROM clientes IF estado = 'SP'"], 1,
               'No padrão SQL, textos usam aspas simples. Aspas duplas são para nomes de colunas/tabelas (identificadores).'),
             sql('Liste os pedidos com status **diferente** de entregue.', "SELECT * FROM pedidos WHERE status <> 'entregue';"),
+            debugSql('🐞 Esta query deveria listar os pedidos **cancelados**, mas dá erro. Corrija.',
+              'SELECT * FROM pedidos WHERE status = cancelado;', "SELECT * FROM pedidos WHERE status = 'cancelado';",
+              { hint: 'Textos precisam de aspas simples.' }),
           ],
         },
         {
@@ -163,7 +172,10 @@ WHERE categoria = 'Acessórios' AND (preco < 100 OR estoque = 0);
 > **AND tem precedência sobre OR.** Use parênteses sempre que misturar os dois!
 `),
             sql("Liste nome e preço dos produtos da categoria **'Acessórios'** com preço **menor que 300**.",
-              "SELECT nome, preco FROM produtos WHERE categoria = 'Acessórios' AND preco < 300;"),
+              "SELECT nome, preco FROM produtos WHERE categoria = 'Acessórios' AND preco < 300;", { variants: [
+                { prompt: "Liste nome e preço dos produtos da categoria **'Eletrônicos'** com preço **menor que 4000**.", solution: "SELECT nome, preco FROM produtos WHERE categoria = 'Eletrônicos' AND preco < 4000;" },
+                { prompt: "Liste nome e estoque dos produtos da categoria **'Móveis'** com estoque **maior que 10**.", solution: "SELECT nome, estoque FROM produtos WHERE categoria = 'Móveis' AND estoque > 10;" },
+              ] }),
             sql("Liste nome e estado dos clientes de **SP ou RJ** usando IN.", "SELECT nome, estado FROM clientes WHERE estado IN ('SP', 'RJ');"),
             sql('Liste os pedidos feitos **entre 2024-03-01 e 2024-05-31** (inclusive).',
               "SELECT * FROM pedidos WHERE data_pedido BETWEEN '2024-03-01' AND '2024-05-31';"),
@@ -173,6 +185,10 @@ WHERE categoria = 'Acessórios' AND (preco < 100 OR estoque = 0);
               'Nada, a sintaxe é inválida',
               'Somente Móveis'], 1,
               "Como AND é avaliado primeiro, a condição vira: Livros OR (Móveis AND preco > 2000)."),
+            debugSql("🐞 A query deveria trazer Livros **ou** Móveis, mas **só os que custam mais de 1000**. O resultado veio errado. Corrija.",
+              "SELECT nome, categoria, preco FROM produtos WHERE categoria = 'Livros' OR categoria = 'Móveis' AND preco > 1000;",
+              "SELECT nome, categoria, preco FROM produtos WHERE (categoria = 'Livros' OR categoria = 'Móveis') AND preco > 1000;",
+              { hint: 'AND é avaliado antes do OR.' }),
             sql("Liste os produtos que **não** são da categoria Eletrônicos nem Livros (use NOT IN).",
               "SELECT * FROM produtos WHERE categoria NOT IN ('Eletrônicos', 'Livros');"),
           ],
@@ -207,6 +223,8 @@ FROM clientes;
 `),
             sql("Liste o nome dos produtos cujo nome **começa com 'Livro'**.", "SELECT nome FROM produtos WHERE nome LIKE 'Livro%';"),
             sql('Liste o nome dos clientes que **não têm email** cadastrado.', 'SELECT nome FROM clientes WHERE email IS NULL;'),
+            debugSql('🐞 A query deveria listar os clientes **sem cidade**, mas não retorna nada. Corrija.',
+              'SELECT nome FROM clientes WHERE cidade = NULL;', 'SELECT nome FROM clientes WHERE cidade IS NULL;'),
             quiz('`SELECT * FROM clientes WHERE email = NULL;` retorna...', ['Os clientes sem email', 'Nenhuma linha', 'Todos os clientes', 'Um erro de sintaxe'], 1,
               'Comparar com = NULL resulta em NULL (desconhecido), que o WHERE trata como falso. Use IS NULL.'),
             sql("Mostre o nome e o email de todos os clientes, trocando emails nulos por **'sem email'** (coluna chamada contato).",
@@ -302,7 +320,10 @@ GROUP BY categoria;
 
 **Regra de ouro:** toda coluna no SELECT que **não** está dentro de uma agregação precisa estar no GROUP BY.
 `),
-            sql('Mostre cada **categoria** e a **quantidade de produtos** nela.', 'SELECT categoria, COUNT(*) FROM produtos GROUP BY categoria;'),
+            sql('Mostre cada **categoria** e a **quantidade de produtos** nela.', 'SELECT categoria, COUNT(*) FROM produtos GROUP BY categoria;', { variants: [
+              { prompt: 'Mostre cada **categoria** e o **preço médio** dos seus produtos (2 casas).', solution: 'SELECT categoria, ROUND(AVG(preco), 2) FROM produtos GROUP BY categoria;' },
+              { prompt: 'Mostre cada **categoria** e o **estoque total** dos seus produtos.', solution: 'SELECT categoria, SUM(estoque) FROM produtos GROUP BY categoria;' },
+            ] }),
             sql('Mostre cada **status** de pedido e quantos pedidos há em cada um, do mais frequente para o menos frequente.',
               'SELECT status, COUNT(*) AS qtd FROM pedidos GROUP BY status ORDER BY qtd DESC;', { ordered: true }),
             sql('Mostre cada **estado** e o número de clientes, ignorando clientes sem estado.',
@@ -344,6 +365,9 @@ HAVING COUNT(*) >= 2;      -- grupos
 8. LIMIT
 `),
             sql('Mostre as categorias com **mais de 2 produtos** e a quantidade.', 'SELECT categoria, COUNT(*) FROM produtos GROUP BY categoria HAVING COUNT(*) > 2;'),
+            debugSql('🐞 Esta query dá erro. Ela deveria mostrar as categorias com mais de 2 produtos. Corrija.',
+              'SELECT categoria, COUNT(*) FROM produtos WHERE COUNT(*) > 2 GROUP BY categoria;',
+              'SELECT categoria, COUNT(*) FROM produtos GROUP BY categoria HAVING COUNT(*) > 2;'),
             sql('Mostre o **cliente_id** e o número de pedidos dos clientes com **3 ou mais pedidos**.',
               'SELECT cliente_id, COUNT(*) FROM pedidos GROUP BY cliente_id HAVING COUNT(*) >= 3;'),
             quiz('Por que `WHERE COUNT(*) > 2` dá erro?', [
@@ -386,6 +410,9 @@ INNER JOIN clientes AS c
             fill('Complete o JOIN:', 'SELECT c.nome, p.status\nFROM pedidos p\nJOIN clientes c ___ c.id = p.___;', [['ON'], ['cliente_id']]),
             sql('Liste o nome dos clientes e a data de pedidos **cancelados**.',
               "SELECT c.nome, p.data_pedido FROM pedidos p JOIN clientes c ON c.id = p.cliente_id WHERE p.status = 'cancelado';"),
+            quiz('📖 Quantas linhas esta query retorna? (há 20 pedidos e todo pedido tem cliente)', ['10', '20', '200', '30'], 1,
+              'Cada pedido casa com exatamente um cliente, então o JOIN mantém as 20 linhas de pedidos.',
+              'SELECT p.id, c.nome\nFROM pedidos p\nJOIN clientes c ON c.id = p.cliente_id;'),
             quiz('O cliente João não tem nenhum pedido. Em `clientes INNER JOIN pedidos`, ele...', ['Aparece com pedido NULL', 'Não aparece', 'Aparece duplicado', 'Causa erro'], 1,
               'INNER JOIN só mantém linhas com correspondência dos dois lados.'),
           ],
@@ -418,6 +445,9 @@ WHERE p.id IS NULL;
             sql('Liste **todos** os clientes e a **quantidade de pedidos** de cada um (inclusive quem tem 0).',
               'SELECT c.nome, COUNT(p.id) FROM clientes c LEFT JOIN pedidos p ON p.cliente_id = c.id GROUP BY c.id, c.nome;',
               { hint: 'Use COUNT(p.id) e não COUNT(*) — por quê?' }),
+            debugSql('🐞 Esta query diz que o João fez 1 pedido — mas ele nunca comprou! Corrija a contagem.',
+              'SELECT c.nome, COUNT(*) AS pedidos FROM clientes c LEFT JOIN pedidos p ON p.cliente_id = c.id GROUP BY c.id, c.nome;',
+              'SELECT c.nome, COUNT(p.id) AS pedidos FROM clientes c LEFT JOIN pedidos p ON p.cliente_id = c.id GROUP BY c.id, c.nome;'),
             quiz('No exercício anterior, por que usar `COUNT(p.id)` em vez de `COUNT(*)`?', [
               'Porque é mais rápido',
               'Porque COUNT(*) contaria 1 para clientes sem pedidos (a linha com NULLs existe)',
@@ -606,6 +636,9 @@ FROM produtos;
 `),
             sql('Mostre nome, categoria, preço e o **preço médio da categoria** (coluna media_categoria, arredondada para 2 casas).',
               'SELECT nome, categoria, preco, ROUND(AVG(preco) OVER (PARTITION BY categoria), 2) AS media_categoria FROM produtos;'),
+            quiz('📖 A tabela produtos tem 12 linhas. O que esta query retorna?', ['1 linha com o valor 12', '12 linhas, todas com o valor 12', '12 linhas numeradas de 1 a 12', 'Erro'], 1,
+              'COUNT(*) OVER () calcula sobre a janela inteira sem colapsar as linhas.',
+              'SELECT nome, COUNT(*) OVER () AS total\nFROM produtos;'),
             sql('Mostre nome, salário e o **percentual do salário** do funcionário em relação ao total da folha (2 casas), coluna pct.',
               'SELECT nome, salario, ROUND(100.0 * salario / SUM(salario) OVER (), 2) AS pct FROM funcionarios;'),
             quiz('Qual a diferença entre `GROUP BY categoria` e `OVER (PARTITION BY categoria)`?', [
@@ -649,6 +682,9 @@ SELECT * FROM r WHERE rn = 1;
             sql('Usando ROW_NUMBER, liste nome, categoria e preço do **produto mais caro de cada categoria**.',
               'WITH r AS (SELECT nome, categoria, preco, ROW_NUMBER() OVER (PARTITION BY categoria ORDER BY preco DESC) AS rn FROM produtos) SELECT nome, categoria, preco FROM r WHERE rn = 1;'),
             quiz('Salários: 10, 8, 8, 5. Qual o DENSE_RANK do salário 5 (ordem decrescente)?', ['3', '4', '2', '5'], 0),
+            debugSql('🐞 A query deveria trazer o funcionário **mais bem pago de cada departamento**, mas só traz um. Corrija.',
+              'SELECT nome, departamento, salario FROM (SELECT *, ROW_NUMBER() OVER (ORDER BY salario DESC) AS rn FROM funcionarios) WHERE rn = 1;',
+              'SELECT nome, departamento, salario FROM (SELECT *, ROW_NUMBER() OVER (PARTITION BY departamento ORDER BY salario DESC) AS rn FROM funcionarios) WHERE rn = 1;'),
             sql('Liste os **2 funcionários mais bem pagos de cada departamento** (nome, departamento, salario).',
               'WITH r AS (SELECT nome, departamento, salario, ROW_NUMBER() OVER (PARTITION BY departamento ORDER BY salario DESC) AS rn FROM funcionarios) SELECT nome, departamento, salario FROM r WHERE rn <= 2;'),
             sql('Divida os produtos em **4 quartis de preço** (NTILE) — colunas nome, preco, quartil (1 = mais baratos).',

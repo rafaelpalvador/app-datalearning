@@ -5,6 +5,7 @@
 import fs from 'node:fs';
 import initSqlJs from 'sql.js';
 import { COURSES } from '../js/content/index.js';
+import { INTERVIEW } from '../js/content/interview.js';
 import { createDb, evaluateSql } from '../js/engines/sql-engine.js';
 
 const SQL = await initSqlJs();
@@ -39,14 +40,10 @@ for (const course of COURSES) {
             if (n !== step.blanks.length) errors.push(`${where}: ${n} lacunas mas ${step.blanks.length} respostas`);
             break;
           }
-          case 'sql': {
-            const res = evaluateSql(() => createDb(SQL), step, step.solution);
-            if (!res.ok) errors.push(`${where}: a solução não passa: ${res.reason}`);
-            else if (!res.expected.values.length) errors.push(`${where}: a solução retorna 0 linhas (exercício fraco)`);
-            const starter = evaluateSql(() => createDb(SQL), step, step.starter || 'SELECT 1;');
-            if (starter.ok) errors.push(`${where}: o código inicial já passa na correção`);
+          case 'sql':
+            checkSql(step, where);
+            (step.variants || []).forEach((v, k) => checkSql({ ...step, ...v }, `${where} variação ${k + 1}`));
             break;
-          }
           case 'python':
             pySteps.push({ where, setup: step.setup, solution: step.solution, starter: step.starter, tests: step.tests });
             break;
@@ -56,6 +53,25 @@ for (const course of COURSES) {
       });
     }
   }
+}
+
+const ivIds = new Set();
+for (const prob of INTERVIEW) {
+  const where = `entrevista ${prob.id}`;
+  if (ivIds.has(prob.id)) errors.push(`${where}: id duplicado`);
+  ivIds.add(prob.id);
+  counts.interview = (counts.interview || 0) + 1;
+  if (prob.step.type === 'sql') checkSql(prob.step, where);
+  else pySteps.push({ where, setup: prob.step.setup, solution: prob.step.solution, starter: prob.step.starter, tests: prob.step.tests });
+}
+
+function checkSql(step, where) {
+  const res = evaluateSql(() => createDb(SQL), step, step.solution);
+  if (!res.ok) errors.push(`${where}: a solução não passa: ${res.reason}`);
+  else if (!res.expected.values.length) errors.push(`${where}: a solução retorna 0 linhas (exercício fraco)`);
+  const starter = evaluateSql(() => createDb(SQL), step, step.starter || 'SELECT 1;');
+  if (starter.ok) errors.push(`${where}: o código inicial já passa na correção`);
+  if (step.kind === 'debug' && !step.starter) errors.push(`${where}: exercício de bug sem código quebrado`);
 }
 
 fs.writeFileSync(new URL('./.python-steps.json', import.meta.url), JSON.stringify(pySteps, null, 1));

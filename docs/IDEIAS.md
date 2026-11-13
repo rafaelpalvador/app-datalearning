@@ -1,6 +1,26 @@
 # Ideias para aperfeiçoar o DataLingo
 
-Organizadas por impacto. ⭐ = recomendo priorizar.
+Organizadas por impacto. ⭐ = recomendo priorizar. ✅ = já implementado (v1.1).
+
+## ✅ Implementado na v1.1
+- Apps para **Android**, **Windows 11** e **Linux**, 100% offline
+- **Revisão espaçada** (SM-2) por exercício + "força por unidade"
+- **Variações automáticas** em exercícios de SQL (na prática e em lições já concluídas)
+- **Explicação do erro** por heurísticas (duplicação por JOIN, filtro faltando, INNER × LEFT, NULL, arredondamento, ordem, colunas) + erros do SQLite/Python traduzidos
+- **Checkpoint por unidade** (80% para pular — funciona também como teste de nivelamento)
+- Exercícios **"encontre o bug"** e de **leitura de código**
+- **Missões diárias**, **conquistas**, **gemas**, **protetor de ofensiva**, recarga de vidas
+- **Modo entrevista** cronometrado (16 problemas)
+- **Lembrete diário** (notificação nativa no Android), vibração e sons
+- **Backup/sincronização** manual entre aparelhos
+
+## Próximos passos sugeridos
+1. **Tutor com IA** (explicação personalizada e dicas progressivas)
+2. **Contas + backend** (sincronização automática, ligas semanais reais, amigos)
+3. **PostgreSQL e DuckDB** no app, além do SQLite
+4. **Projetos guiados** (capstones) e mais conteúdo do `CURRICULO.md`
+5. **Editor com autocomplete** de tabelas e colunas
+6. Publicação na **Google Play / AppGallery** (precisa de chave privada e conta de desenvolvedor)
 
 ## 1. Dinâmica de aprendizado
 

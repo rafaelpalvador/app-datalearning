@@ -23,8 +23,23 @@ export const fill = (prompt, code, blanks, explanation = '') =>
 // opts: { starter, ordered, check, hint }
 //  - ordered: a ordem das linhas importa (quando há ORDER BY no enunciado)
 //  - check: query executada após o código do aluno e da solução (exercícios de INSERT/UPDATE/DDL)
+//  - kind: 'debug' → o starter traz uma query com bug para o aluno corrigir
+//  - variants: [{ prompt, solution }] → versões alternativas sorteadas na prática,
+//    para o aluno não decorar a resposta
 export const sql = (prompt, solution, opts = {}) =>
-  ({ type: 'sql', prompt, solution: solution.trim(), starter: opts.starter ?? '', ordered: !!opts.ordered, check: opts.check ?? null, hint: opts.hint ?? '' });
+  ({ type: 'sql', prompt, solution: solution.trim(), starter: opts.starter ?? '', ordered: !!opts.ordered, check: opts.check ?? null, hint: opts.hint ?? '', kind: opts.kind ?? null, variants: opts.variants ?? [] });
+
+// Atalho para "encontre o bug": o aluno recebe a query quebrada no editor.
+export const debugSql = (prompt, buggy, solution, opts = {}) =>
+  sql(prompt, solution, { ...opts, starter: buggy, kind: 'debug' });
+
+// Escolhe uma variação aleatória de um passo (ou o próprio passo).
+export function withVariant(step) {
+  if (!step.variants?.length) return step;
+  const all = [{ prompt: step.prompt, solution: step.solution }, ...step.variants];
+  const v = all[Math.floor(Math.random() * all.length)];
+  return { ...step, ...v };
+}
 
 // opts: { starter, setup, tests, packages, hint }
 export const py = (prompt, solution, tests, opts = {}) =>
