@@ -13,12 +13,13 @@ Os apps são compilados automaticamente pelo **GitHub Actions** a cada push (aba
 
 ## Conteúdo
 
-- **SQL do Zero ao Avançado**: 9 unidades, 24 lições (SELECT → window functions, CTE recursiva, índices, coorte, Pareto e funil)
-- **Python para Análise de Dados**: 9 unidades, 21 lições (Python, NumPy, pandas, limpeza, séries temporais, visualização, APIs, scraping, SQL + Python, estatística)
-- **Estatística para Dados**: 6 unidades, 15 lições (descritiva, probabilidade, normal e binomial, intervalos de confiança, bootstrap, testes de hipótese e A/B, correlação, regressão, séries temporais e anomalias)
+- **SQL do Zero ao Avançado**: 4 níveis, 10 unidades, 26 lições (SELECT → window functions, CTE recursiva, índices, coorte, Pareto, gaps & islands, calendários, JSON e UPSERT)
+- **Python para Análise de Dados**: 4 níveis, 10 unidades, 24 lições (Python, NumPy, pandas, limpeza, séries temporais, visualização, APIs, scraping, SQL + Python, desempenho, dados grandes e código de produção)
+- **Estatística para Dados**: 4 níveis, 15 unidades, 35 lições, do básico ao especialista: descritiva, probabilidade, intervalos, testes A/B, regressão, qui-quadrado e ANOVA, séries temporais, não paramétricos, comparações múltiplas, regressão logística, poder e CUPED, inferência bayesiana, máxima verossimilhança, Monte Carlo, inferência causal (DiD, escore de propensão), testes sequenciais, bandits e análise de sobrevivência
 - **Entrevistas**: 68 problemas cronometrados, separados em **SQL (40)** e **Python (28)** e em 4 níveis (Júnior, Pleno, Sênior, Especialista), cada um com a explicação de como pensar e uma solução de referência
 - **Dados para estatística**: além da loja, tabelas grandes geradas de forma determinística: teste A/B com 2.000 usuários, 1.098 dias de vendas em 3 lojas (com sazonalidade e outliers) e 420 avaliações; os mesmos dados ficam disponíveis no SQL e como DataFrames no Python
-- **343 passos**: 78 cards de teoria e 265 exercícios de prática (89 questões, 97 de SQL, 68 de Python, montar blocos e completar lacunas), todos validados automaticamente
+- **Todas as trilhas em 4 níveis**: Básico, Intermediário, Avançado e Especialista
+- **473 passos**: 110 cards de teoria e 363 exercícios de prática (134 questões, 110 de SQL, 106 de Python, montar blocos e completar lacunas), todos validados automaticamente
 
 ## Dinâmica
 

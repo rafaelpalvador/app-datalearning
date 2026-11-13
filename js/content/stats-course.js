@@ -1,5 +1,6 @@
 import { theory, quiz, order, fill, sql, py } from './helpers.js';
 import { PY_STATS, PY_STATS_NOTE } from './datasets.js';
+import { ST_INTRO, ST_CATEG, ST_TS_LESSON, ST_NONPARAM, ST_REGADV, ST_POWER, ST_BAYES, ST_MLE, ST_CAUSAL, ST_EXPADV } from './stats-extra.js';
 
 const r = String.raw;
 const PD = ['pandas'];
@@ -612,3 +613,18 @@ assert abs(online["z"].dropna().iloc[0] - zz.dropna().iloc[0]) < 1e-9`, S),
     },
   ],
 };
+
+// ───────────────────────────── Organização em níveis (básico → especialista)
+
+{
+  const base = Object.fromEntries(STATS_COURSE.units.map((u) => [u.id, u]));
+  base['st-u6'].lessons.push(ST_TS_LESSON);
+  const L = (level, unit) => ({ ...unit, level });
+  STATS_COURSE.units = [
+    L(1, ST_INTRO), L(1, base['st-u1']), L(1, base['st-u2']),
+    L(2, base['st-u3']), L(2, base['st-u4']), L(2, base['st-u5']), L(2, ST_CATEG),
+    L(3, base['st-u6']), L(3, ST_NONPARAM), L(3, ST_REGADV), L(3, ST_POWER),
+    L(4, ST_BAYES), L(4, ST_MLE), L(4, ST_CAUSAL), L(4, ST_EXPADV),
+  ];
+  STATS_COURSE.description = 'Do básico ao especialista: descritiva, probabilidade, inferência, testes A/B, regressão, ANOVA, bayesiana, causalidade, experimentação avançada e sobrevivência, com SQL e Python sobre dados reais.';
+}

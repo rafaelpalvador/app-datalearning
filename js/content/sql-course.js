@@ -1,4 +1,5 @@
 import { theory, quiz, order, fill, sql, debugSql } from './helpers.js';
+import { SQL_EXPERT } from './expert-units.js';
 
 export const SQL_COURSE = {
   id: 'sql',
@@ -938,3 +939,9 @@ Ferramentas: CTEs + window functions + CASE WHEN.
     },
   ],
 };
+
+// ───────────────────────────── Níveis: 1 Básico · 2 Intermediário · 3 Avançado · 4 Especialista
+{
+  const LEVEL = {'sql-u1': 1, 'sql-u2': 1, 'sql-u3': 1, 'sql-u4': 2, 'sql-u5': 2, 'sql-u6': 3, 'sql-u7': 3, 'sql-u8': 3, 'sql-u9': 4};
+  SQL_COURSE.units = [...SQL_COURSE.units.map((u) => ({ ...u, level: LEVEL[u.id] })), { ...SQL_EXPERT, level: 4 }];
+}

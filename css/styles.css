@@ -252,6 +252,17 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--i
 .lesson-row .chev { color: var(--ink-3); }
 .checkpoint-row .l-status { border-style: dashed; }
 
+/* níveis da trilha */
+.level-section { display: flex; flex-direction: column; gap: 14px; }
+.level-title { display: grid; grid-template-columns: auto minmax(0, 1fr) 160px; gap: 14px; align-items: center; padding: 6px 2px; margin-top: 10px; }
+.level-title .level-badge { background: var(--track); color: #fff; }
+.level-prog { display: flex; flex-direction: column; gap: 6px; align-items: flex-end; }
+.level-prog .progress { width: 100%; }
+@media (max-width: 600px) {
+  .level-title { grid-template-columns: auto minmax(0, 1fr); }
+  .level-prog { grid-column: 1 / -1; align-items: stretch; }
+}
+
 /* ───────── sessão (lição) */
 .session { display: flex; flex-direction: column; min-height: 100vh; min-height: 100dvh; background: var(--bg); }
 .session-top { display: grid; grid-template-columns: auto minmax(0, 1fr) auto auto; gap: 14px; align-items: center; max-width: 960px; width: 100%; margin: 0 auto; padding: calc(14px + env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) 10px max(16px, env(safe-area-inset-left, 0px)); }

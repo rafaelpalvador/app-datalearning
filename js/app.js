@@ -1,4 +1,4 @@
-import { COURSES, findLesson, allLessons } from './content/index.js';
+import { COURSES, findLesson, allLessons, TRACK_LEVELS, LEVEL_DESC } from './content/index.js';
 import { INTERVIEW, INTERVIEW_SQL, INTERVIEW_PY, LEVELS } from './content/interview.js';
 import { SCHEMA_DOC } from './content/datasets.js';
 import { withVariant } from './content/helpers.js';
@@ -266,6 +266,7 @@ function trackCard(c) {
     h('div', { class: 'stack', style: { gap: '4px' } }, h('h3', {}, c.title), h('p', { class: 'small muted clamp-3' }, c.description)),
     h('div', { class: 'progress' }, h('div', { class: 'bar', style: { width: `${p.pct}%` } })),
     h('div', { class: 'track-meta' },
+      h('span', {}, ic('layers', 14), '4 níveis'),
       h('span', {}, ic('book', 14), `${n.lessons} lições`),
       h('span', {}, ic('reader', 14), `${n.theory} teoria`),
       h('span', {}, ic('code', 14), `${n.practice} prática`)),
@@ -291,7 +292,7 @@ function viewHome() {
       h('div', { class: 'stack', style: { gap: '20px' } },
         next ? h('section', { class: 'card continue', style: { '--track': trackVar(next.course.id) } },
           h('div', { class: 'stack', style: { gap: '6px' } },
-            h('span', { class: 'track-chip' }, h('span', { class: 'dot' }), `${next.course.title} · ${next.unit.title}`),
+            h('span', { class: 'track-chip' }, h('span', { class: 'dot' }), `${next.course.title} · Nível ${next.unit.level} · ${next.unit.title}`),
             h('h2', {}, next.lesson.title),
             h('span', { class: 'small faint' }, (() => { const c = lessonCounts(next.lesson); return `${c.theory} cards de teoria · ${c.practice} exercícios`; })())),
           h('a', { class: 'btn primary', href: `#/licao/${next.lesson.id}` }, s.xp ? 'Continuar' : 'Começar', ic('chevronRight', 18)))
@@ -328,23 +329,7 @@ function viewCourse(courseId) {
   const currentId = list.find((l) => !s.completed[l.id])?.id;
   const p = courseProgress(course);
   const n = courseCounts(course);
-
-  page('home',
-    h('a', { class: 'btn ghost sm', href: '#/', style: { alignSelf: 'flex-start' } }, ic('arrowLeft', 16), 'Início'),
-    h('section', { class: 'course-head', style: { '--track': trackVar(course.id) } },
-      h('span', { class: 'track-icon' }, ic(course.icon, 26)),
-      h('div', { class: 'stack', style: { gap: '8px' } },
-        h('h1', {}, course.title),
-        h('p', { class: 'muted' }, course.description),
-        h('div', { class: 'stat-row' },
-          h('div', {}, h('strong', {}, `${p.done}/${p.total}`), h('span', {}, 'lições')),
-          h('div', {}, h('strong', {}, n.theory), h('span', {}, 'cards de teoria')),
-          h('div', {}, h('strong', {}, n.practice), h('span', {}, 'exercícios práticos')),
-          h('div', {}, h('strong', {}, `${p.pct}%`), h('span', {}, 'concluído'))),
-        h('div', { class: 'progress lg' }, h('div', { class: 'bar', style: { width: `${p.pct}%` } })),
-      ),
-    ),
-    course.units.map((unit, ui) => {
+  const unitCard = (unit, ui) => {
       const unitDone = unit.lessons.every((l) => s.completed[l.id]);
       const unitOpen = lessonUnlocked(course, unit.lessons[0].id);
       const cp = s.checkpoints[unit.id];
@@ -376,6 +361,35 @@ function viewCourse(courseId) {
             h('div', { class: 'l-meta' }, h('span', {}, cp ? `aprovado com ${Math.round(cp.score * 100)}%` : unitDone ? 'teste a unidade inteira' : 'acerte 80% e pule a unidade'))),
           h('span', {}), h('span', { class: 'chev' }, ic('chevronRight', 18))),
       );
+    };
+
+  page('home',
+    h('a', { class: 'btn ghost sm', href: '#/', style: { alignSelf: 'flex-start' } }, ic('arrowLeft', 16), 'Início'),
+    h('section', { class: 'course-head', style: { '--track': trackVar(course.id) } },
+      h('span', { class: 'track-icon' }, ic(course.icon, 26)),
+      h('div', { class: 'stack', style: { gap: '8px' } },
+        h('h1', {}, course.title),
+        h('p', { class: 'muted' }, course.description),
+        h('div', { class: 'stat-row' },
+          h('div', {}, h('strong', {}, '4'), h('span', {}, 'níveis')),
+          h('div', {}, h('strong', {}, `${p.done}/${p.total}`), h('span', {}, 'lições')),
+          h('div', {}, h('strong', {}, n.theory), h('span', {}, 'cards de teoria')),
+          h('div', {}, h('strong', {}, n.practice), h('span', {}, 'exercícios práticos')),
+          h('div', {}, h('strong', {}, `${p.pct}%`), h('span', {}, 'concluído'))),
+        h('div', { class: 'progress lg' }, h('div', { class: 'bar', style: { width: `${p.pct}%` } })),
+      ),
+    ),
+    TRACK_LEVELS.map((lv) => {
+      const units = course.units.map((u, ui) => ({ u, ui })).filter(({ u }) => u.level === lv.id);
+      if (!units.length) return null;
+      const lessons = units.flatMap(({ u }) => u.lessons);
+      const done = lessons.filter((l) => s.completed[l.id]).length;
+      return h('section', { class: 'level-section', style: { '--track': trackVar(course.id) } },
+        h('div', { class: 'level-title' },
+          h('span', { class: 'level-badge' }, `Nível ${lv.id}`),
+          h('div', { style: { minWidth: '0' } }, h('h2', {}, lv.name), h('p', { class: 'small muted' }, LEVEL_DESC[course.id][lv.id])),
+          h('div', { class: 'level-prog' }, h('span', { class: 'small faint num' }, `${done}/${lessons.length}`), h('div', { class: 'progress' }, h('div', { class: 'bar', style: { width: `${pct(done, lessons.length)}%` } })))),
+        units.map(({ u, ui }) => unitCard(u, ui)));
     }),
   );
 }

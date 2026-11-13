@@ -73,16 +73,23 @@ Cada lição segue o mesmo ciclo pedagógico:
 
 ---
 
-## Trilha 3 — Estatística para Dados ✅
+## Trilha 3 — Estatística para Dados ✅ (do básico ao especialista)
 
-| Unidade | Lições |
+| Nível | Unidades |
 |---|---|
-| 1. Estatística descritiva | média, mediana e moda · variância, desvio e CV · quartis, boxplot e outliers (IQR e z-score) |
-| 2. Probabilidade e distribuições | probabilidade e Bayes · normal, z-score e TCL · binomial |
-| 3. Amostragem e intervalos | erro padrão e IC da média · IC de proporções e bootstrap |
-| 4. Testes de hipótese e A/B | hipóteses e p-valor · teste z de duas proporções · t de Welch e armadilhas (espiar, testes múltiplos, Simpson) |
-| 5. Correlação e regressão | Pearson e Spearman · regressão linear e R² |
-| 6. Séries temporais aplicadas | sazonalidade, tendência e médias móveis · detecção de anomalias |
+| **1 · Básico** | Primeiros conceitos (população, amostra, tipos de variáveis, frequências, histogramas) · Estatística descritiva · Probabilidade e distribuições |
+| **2 · Intermediário** | Amostragem e intervalos de confiança (incl. bootstrap) · Testes de hipótese e testes A/B · Correlação e regressão · Qui-quadrado e ANOVA |
+| **3 · Avançado** | Séries temporais (sazonalidade, anomalias, autocorrelação, baselines) · Não paramétricos e comparações múltiplas (permutação, Mann-Whitney, Holm, Benjamini-Hochberg) · Regressão múltipla e logística · Poder, MDE e CUPED |
+| **4 · Especialista** | Inferência bayesiana (Beta-Binomial, P(B > A), perda esperada, shrinkage) · Máxima verossimilhança, AIC e Monte Carlo · Inferência causal (DAGs, diferença em diferenças, escore de propensão) · Experimentação avançada (espiar resultados, SRM, testes sequenciais, Thompson Sampling, Kaplan-Meier) |
+
+## Níveis de SQL e Python ✅
+
+| Nível | SQL | Python |
+|---|---|---|
+| **1 · Básico** | Primeiros passos, filtros, agregações | Python essencial, NumPy |
+| **2 · Intermediário** | JOINs, subqueries e CTEs | pandas: fundamentos, agregar e combinar, limpeza |
+| **3 · Avançado** | Window functions, datas e tipos, modelagem | Séries temporais, visualização, extração, estatística |
+| **4 · Especialista** | Performance e análises de negócio · Gaps & islands, calendários, JSON, UPSERT | Desempenho, dados maiores que a memória, código de produção |
 
 ## Entrevistas ✅
 

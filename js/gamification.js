@@ -52,6 +52,10 @@ const courseDone = (courseId) => {
   const s = store.getState();
   return allLessons(COURSES.find((c) => c.id === courseId)).every((l) => s.completed[l.id]);
 };
+const levelDone = (courseId, level) => {
+  const s = store.getState();
+  return COURSES.find((c) => c.id === courseId).units.filter((u) => u.level === level).every((u) => u.lessons.every((l) => s.completed[l.id]));
+};
 const nLessons = () => Object.keys(store.getState().completed).length;
 const solvedIn = (list, level) => list.filter((p) => (!level || p.level === level) && store.getState().interview[p.id]).length;
 
@@ -73,6 +77,13 @@ export const ACHIEVEMENTS = [
   { id: 'sqlall', icon: 'database', title: 'SQL completo', desc: 'Conclua toda a trilha de SQL', test: () => courseDone('sql') },
   { id: 'pyall', icon: 'code', title: 'Pythonista de dados', desc: 'Conclua toda a trilha de Python', test: () => courseDone('python') },
   { id: 'statall', icon: 'sigma', title: 'Estatístico', desc: 'Conclua toda a trilha de Estatística', test: () => courseDone('stats') },
+  { id: 'sqlL2', icon: 'database', title: 'SQL intermediário', desc: 'Conclua o nível Intermediário de SQL', test: () => levelDone('sql', 2) },
+  { id: 'sqlL4', icon: 'crown', title: 'Especialista em SQL', desc: 'Conclua o nível Especialista de SQL', test: () => levelDone('sql', 4) },
+  { id: 'pyL2', icon: 'code', title: 'Python intermediário', desc: 'Conclua o nível Intermediário de Python', test: () => levelDone('python', 2) },
+  { id: 'pyL4', icon: 'crown', title: 'Especialista em Python', desc: 'Conclua o nível Especialista de Python', test: () => levelDone('python', 4) },
+  { id: 'stL2', icon: 'sigma', title: 'Inferência dominada', desc: 'Conclua o nível Intermediário de Estatística', test: () => levelDone('stats', 2) },
+  { id: 'stL3', icon: 'chart', title: 'Estatístico avançado', desc: 'Conclua o nível Avançado de Estatística', test: () => levelDone('stats', 3) },
+  { id: 'stL4', icon: 'crown', title: 'Especialista em Estatística', desc: 'Conclua o nível Especialista de Estatística: bayesiana, causalidade e experimentação', test: () => levelDone('stats', 4) },
   { id: 'checkpoint', icon: 'flag', title: 'Atalho merecido', desc: 'Passe em um checkpoint de unidade', test: (s) => Object.keys(s.checkpoints).length >= 1 },
   { id: 'iv1', icon: 'briefcase', title: 'Primeira entrevista', desc: 'Resolva um problema de entrevista', test: (s) => Object.keys(s.interview).length >= 1 },
   { id: 'ivsql2', icon: 'database', title: 'Pleno em SQL', desc: 'Resolva todos os problemas de SQL nível Pleno', test: () => solvedIn(INTERVIEW_SQL, 2) === INTERVIEW_SQL.filter((p) => p.level === 2).length },

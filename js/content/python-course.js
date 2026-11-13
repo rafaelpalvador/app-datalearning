@@ -1,4 +1,5 @@
 import { theory, quiz, order, fill, py } from './helpers.js';
+import { PY_EXPERT } from './expert-units.js';
 import { PY_VENDAS } from './datasets.js';
 
 const r = String.raw;
@@ -1028,3 +1029,9 @@ assert resumo["desvio"] == round(vendas["valor"].std(), 2)`,
     },
   ],
 };
+
+// ───────────────────────────── Níveis: 1 Básico · 2 Intermediário · 3 Avançado · 4 Especialista
+{
+  const LEVEL = {'py-u1': 1, 'py-u2': 1, 'py-u3': 2, 'py-u4': 2, 'py-u5': 2, 'py-u6': 3, 'py-u7': 3, 'py-u8': 3, 'py-u9': 3};
+  PYTHON_COURSE.units = [...PYTHON_COURSE.units.map((u) => ({ ...u, level: LEVEL[u.id] })), { ...PY_EXPERT, level: 4 }];
+}
