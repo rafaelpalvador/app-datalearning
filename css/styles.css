@@ -27,7 +27,7 @@
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root:not([data-theme="light"]) {
     --bg: #131f24;
     --bg-soft: #1a2b33;
     --card: #1a2b33;
@@ -43,8 +43,28 @@
     --tk-str: #8fd18f;
     --tk-num: #f7b267;
     --tk-com: #7a8a93;
+    color-scheme: dark;
   }
 }
+:root[data-theme="dark"] {
+    --bg: #131f24;
+    --bg-soft: #1a2b33;
+    --card: #1a2b33;
+    --border: #37464f;
+    --text: #f1f7fb;
+    --muted: #a3b3bc;
+    --code-bg: #0f1a1f;
+    --good-bg: #1f3a12;
+    --good-text: #79d634;
+    --bad-bg: #3f1d1f;
+    --bad-text: #ff7878;
+    --tk-kw: #c792ea;
+    --tk-str: #8fd18f;
+    --tk-num: #f7b267;
+    --tk-com: #7a8a93;
+    color-scheme: dark;
+  }
+
 
 * { box-sizing: border-box; }
 html, body { margin: 0; padding: 0; }
@@ -214,6 +234,17 @@ details.schema ul { margin: 6px 0; padding-left: 18px; font-size: 0.9rem; }
 .cell.l1 { background: #c6f0a0; } .cell.l2 { background: #8fdc4d; } .cell.l3 { background: #58cc02; } .cell.l4 { background: #3a8a00; }
 .course-line { display: grid; grid-template-columns: minmax(140px, 260px) 1fr 44px; gap: 12px; align-items: center; }
 .danger-zone { margin-top: 40px; display: flex; gap: 10px; flex-wrap: wrap; }
+
+/* ───────── diálogo, demo */
+.modal-backdrop { position: fixed; inset: 0; z-index: 200; background: rgba(0, 0, 0, 0.45); display: grid; place-items: center; padding: max(16px, env(safe-area-inset-left, 0px)); animation: toast-in 0.15s ease; }
+.modal { background: var(--card); color: var(--text); border: 2px solid var(--border); border-radius: 20px; padding: 20px; width: min(100%, 420px); box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3); }
+.modal p { margin: 0 0 18px; font-weight: 700; font-size: 1.05rem; }
+.modal-actions { display: flex; gap: 10px; justify-content: flex-end; flex-wrap: wrap; }
+.btn.danger-solid { background: var(--red); border-color: var(--red-dark); color: #fff; }
+.demo-bar { display: flex; flex-wrap: wrap; gap: 4px 12px; justify-content: center; align-items: center; padding: 6px 16px; font-size: 0.85rem; background: color-mix(in srgb, var(--yellow) 22%, var(--bg)); color: var(--text); border-bottom: 2px solid var(--border); }
+.link-btn { font: inherit; font-weight: 800; color: var(--blue); background: none; border: none; cursor: pointer; padding: 2px 4px; }
+:focus-visible { outline: 3px solid color-mix(in srgb, var(--blue) 60%, transparent); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
 
 /* ───────── navegação */
 .top-nav { display: flex; gap: 4px; margin-right: auto; margin-left: 16px; }

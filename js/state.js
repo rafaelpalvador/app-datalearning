@@ -291,8 +291,34 @@ export function consumeFrozeNotice() {
   return n;
 }
 
+// Progresso de exemplo para a versão de demonstração (window.DATALINGO_DEMO).
+export function seedDemo([sqlIds, pyIds], interviewIds) {
+  const s = defaults();
+  const now = Date.now();
+  const done = [...sqlIds.slice(0, 11), ...pyIds.slice(0, 5)];
+  done.forEach((id, i) => {
+    s.completed[id] = { at: now - (done.length - i) * DAY * 2, stars: [3, 2, 3, 3, 1, 3, 2, 3][i % 8], bestMistakes: i % 3 };
+    for (let k = 1; k < 6; k++) {
+      s.srs[`${id}#${k}`] = { ease: 2.5, interval: 3, reps: 2, lapses: i % 4 === 0 ? 1 : 0, due: now + ((i + k) % 5 === 0 ? -DAY : DAY * ((i + k) % 7)) };
+    }
+  });
+  for (let d = 0; d < 70; d++) {
+    if (d < 6 || (d * 7) % 5 > 1) s.history[today(new Date(now - d * DAY))] = d === 0 ? 25 : 15 + ((d * 37) % 90);
+  }
+  Object.assign(s, {
+    xp: Object.values(s.history).reduce((a, b) => a + b, 0), gems: 85, streak: 6, bestStreak: 12, freezes: 1,
+    hearts: 4, lastActiveDay: today(), demoSeeded: true,
+  });
+  s.daily = { ...freshDaily(), xp: 25, lessons: 1, sql: 4, python: 2, review: 3, combo: 4, maxCombo: 6 };
+  s.totals = { correct: 214, answered: 251, perfectLessons: 5, maxCombo: 17 };
+  s.mistakes = [{ lessonId: sqlIds[4], stepIndex: 2, at: now }, { lessonId: sqlIds[9], stepIndex: 3, at: now }, { lessonId: pyIds[3], stepIndex: 1, at: now }];
+  s.interview = { [interviewIds[0]]: { solvedAt: now - DAY, bestSecs: 142 }, [interviewIds[2]]: { solvedAt: now, bestSecs: 61 } };
+  state = s;
+  save();
+}
+
 export function resetProgress() {
-  state = defaults();
+  state = { ...defaults(), demoSeeded: !!state?.demoSeeded };
   save();
 }
 

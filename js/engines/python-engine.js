@@ -99,7 +99,11 @@ export function friendlyPyError(msg) {
   if (/AttributeError: '(\w+)' object has no attribute '(\w+)'/.test(m)) { x = m.match(/'(\w+)' object has no attribute '(\w+)'/); return `Objetos <code>${x[1]}</code> não têm <code>.${x[2]}</code>. Confira o tipo da variável e o nome do método.`; }
   if (/TypeError: unsupported operand/.test(m)) return 'Operação entre tipos incompatíveis (ex.: texto + número). Converta com <code>int()</code>, <code>float()</code> ou <code>.astype()</code>.';
   if (/ZeroDivisionError/.test(m)) return 'Divisão por zero.';
-  if (/ModuleNotFoundError/.test(m)) return 'Essa biblioteca não está disponível aqui.';
+  if (/ModuleNotFoundError/.test(m)) {
+    return window.DATALINGO_DEMO
+      ? 'Na demonstração online só NumPy, BeautifulSoup e sqlite3 estão disponíveis. pandas e matplotlib funcionam offline no app instalado.'
+      : 'Essa biblioteca não está disponível aqui.';
+  }
   return '';
 }
 
@@ -119,7 +123,10 @@ export async function runPython({ setup = '', code = '', tests = '', packages = 
     if (packages.length) await pyodide.loadPackage(packages);
     await pyodide.loadPackagesFromImports(`${setup}\n${code}\n${tests}`);
   } catch (e) {
-    return { ok: false, stdout: stdout.join('\n'), error: `Falha ao carregar bibliotecas: ${e.message}` };
+    const demo = window.DATALINGO_DEMO
+      ? 'Nesta demonstração online o pandas e o matplotlib não estão disponíveis (os arquivos passam do limite de tamanho da página). No app instalado (Android, Windows ou Linux) eles funcionam offline.'
+      : `Falha ao carregar bibliotecas: ${e.message}`;
+    return { ok: false, stdout: stdout.join('\n'), error: demo };
   }
 
   onStatus('Executando...');

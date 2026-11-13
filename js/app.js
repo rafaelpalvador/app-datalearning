@@ -65,6 +65,24 @@ function toast(html, kind = '') {
   setTimeout(() => t.remove(), 4100);
 }
 
+// ─────────────────────────────────────────── confirmação (substitui o confirm() nativo,
+// que é bloqueado em alguns ambientes e destoa do visual no celular)
+function askConfirm(message, { ok = 'Confirmar', danger = false } = {}) {
+  return new Promise((resolve) => {
+    const prevKey = keyHandler;
+    const close = (v) => { ov.remove(); keyHandler = prevKey; resolve(v); };
+    const okBtn = h('button', { class: `btn ${danger ? 'danger-solid' : 'primary'}`, onclick: () => close(true) }, ok);
+    const ov = h('div', { class: 'modal-backdrop', onclick: (e) => { if (e.target === ov) close(false); } },
+      h('div', { class: 'modal', role: 'dialog', 'aria-modal': 'true', 'aria-label': message },
+        h('p', {}, message),
+        h('div', { class: 'modal-actions' }, h('button', { class: 'btn ghost', onclick: () => close(false) }, 'Cancelar'), okBtn),
+      ));
+    keyHandler = (e) => { if (e.key === 'Escape') close(false); if (e.key === 'Enter') { e.preventDefault(); close(true); } };
+    document.body.append(ov);
+    okBtn.focus();
+  });
+}
+
 // ─────────────────────────────────────────── progresso
 function lessonUnlocked(course, lessonId) {
   const s = store.getState();
@@ -121,8 +139,21 @@ function bottomNav(active) {
   return h('nav', { class: 'bottom-nav' }, NAV.map((n) => h('a', { href: n.href, class: n.id === active ? 'active' : '' }, h('span', { class: 'bn-icon' }, n.icon), h('span', {}, n.label))));
 }
 
+const IS_DEMO = !!window.DATALINGO_DEMO;
+
+function demoBar() {
+  if (!IS_DEMO) return null;
+  return h('div', { class: 'demo-bar' },
+    h('span', {}, h('strong', {}, 'Demonstração'), ' · o progresso mostrado é de exemplo'),
+    h('button', {
+      class: 'link-btn',
+      onclick: async () => { if (await askConfirm('Começar do zero nesta demonstração?', { ok: 'Começar do zero' })) { store.resetProgress(); location.hash = '#/'; route(); } },
+    }, 'Começar do zero'),
+  );
+}
+
 function page(active, ...children) {
-  app.replaceChildren(topBar(active), h('main', { class: 'container' }, ...children), bottomNav(active));
+  app.replaceChildren(topBar(active), demoBar(), h('main', { class: 'container' }, ...children), bottomNav(active));
   window.scrollTo(0, 0);
 }
 
@@ -530,8 +561,8 @@ function startSession({ title, items, mode, lessonId, unitId, interview, backHre
   const body = h('div', { class: 'session-body' });
   const footer = h('footer', { class: 'session-footer' });
 
-  const exit = () => {
-    if (completedCount === 0 || confirm('Sair agora? O progresso desta sessão será perdido.')) {
+  const exit = async () => {
+    if (completedCount === 0 || await askConfirm('Sair agora? O progresso desta sessão será perdido.', { ok: 'Sair', danger: true })) {
       clearInterval(timerId);
       activeSession = null;
       location.hash = backHref;
@@ -1010,9 +1041,9 @@ function viewProfile() {
           const ta = h('textarea', { class: 'editor small-editor', placeholder: 'Cole aqui o código que começa com DL1:' });
           put(backupBox, ta, h('button', {
             class: 'btn primary',
-            onclick: () => {
+            onclick: async () => {
               try {
-                if (!confirm('Substituir o progresso deste aparelho pelo do código?')) return;
+                if (!await askConfirm('Substituir o progresso deste aparelho pelo do código?', { ok: 'Substituir', danger: true })) return;
                 store.importCode(ta.value);
                 toast('✅ Progresso importado!');
                 viewProfile();
@@ -1025,15 +1056,15 @@ function viewProfile() {
     backupBox,
 
     h('div', { class: 'danger-zone' },
-      h('button', { class: 'btn ghost danger', onclick: () => { if (confirm('Apagar todo o progresso?')) { store.resetProgress(); viewProfile(); } } }, 'Apagar progresso'),
+      h('button', { class: 'btn ghost danger', onclick: async () => { if (await askConfirm('Apagar todo o progresso? Isso não pode ser desfeito.', { ok: 'Apagar', danger: true })) { store.resetProgress(); viewProfile(); } } }, 'Apagar progresso'),
       h('button', { class: 'btn ghost', onclick: unlockAll }, 'Desbloquear tudo (modo professor)'),
     ),
     h('p', { class: 'muted small center' }, `DataLingo · ${platform.platformName()}`),
   );
 }
 
-function unlockAll() {
-  if (!confirm('Marcar todas as lições como concluídas (sem XP)? Útil para explorar o conteúdo.')) return;
+async function unlockAll() {
+  if (!await askConfirm('Marcar todas as lições como concluídas (sem XP)? Útil para explorar o conteúdo.', { ok: 'Desbloquear' })) return;
   for (const c of COURSES) for (const l of allLessons(c)) if (!store.getState().completed[l.id]) store.completeLesson(l.id, 3, { silent: true });
   location.hash = '#/';
 }
@@ -1070,6 +1101,11 @@ platform.styleStatusBar(darkQuery.matches);
 darkQuery.addEventListener?.('change', (e) => platform.styleStatusBar(e.matches));
 platform.startInAppReminderLoop(store.getState);
 document.documentElement.dataset.platform = platform.platformName();
+
+if (IS_DEMO && !store.getState().demoSeeded) {
+  store.seedDemo(COURSES.map((c) => allLessons(c).map((l) => l.id)), INTERVIEW.map((p) => p.id));
+  checkAchievements();
+}
 
 window.addEventListener('hashchange', route);
 route();
