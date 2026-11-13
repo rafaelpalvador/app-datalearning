@@ -21,6 +21,10 @@ Organizadas por impacto. ⭐ = recomendo priorizar. ✅ = já implementado (v1.1
 - 68 problemas de entrevista (SQL e Python, 4 níveis) com explicação do conceito
 - Central de dúvidas: busca na teoria + tutor de IA dentro dos exercícios
 
+## ✅ Implementado na v1.3 e v1.4
+- Estatística do básico ao especialista (35 lições) e 4 níveis em todas as trilhas
+- Tutor com qualquer IA: Gemini, ChatGPT, Claude, OpenRouter, Groq, Mistral, DeepSeek, Ollama e APIs compatíveis com a OpenAI
+
 ## Próximos passos sugeridos
 2. **Contas + backend** (sincronização automática, ligas semanais reais, amigos)
 3. **PostgreSQL e DuckDB** no app, além do SQLite

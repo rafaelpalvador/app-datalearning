@@ -7,7 +7,7 @@ import { renderMarkdown, inline, esc, highlight } from './markdown.js';
 import { freshDb, runQuery, evaluateSql, initSql, createDb, friendlySqlError } from './engines/sql-engine.js';
 import { runPython, friendlyPyError } from './engines/python-engine.js';
 import { dailyMissions, settleMissions, checkAchievements, ACHIEVEMENTS, MISSION_REWARD } from './gamification.js';
-import { askTutor, tutorMode, contextFromStep, isDemoRuntime } from './tutor.js';
+import { askTutor, tutorMode, contextFromStep, isDemoRuntime, PROVIDERS, PROVIDER_ORDER, keyOf, modelOf, baseUrlOf, isConfigured, listModels, pickModel, testConnection, activeLabel, tutorConfig } from './tutor.js';
 import { icon } from './icons.js';
 import * as platform from './platform.js';
 
@@ -1083,7 +1083,7 @@ function viewDoubts() {
     h('div', { class: 'search' }, ic('search', 20), input),
     resultsEl,
     h('section', { class: 'card stack' },
-      h('div', { class: 'card-title', style: { marginBottom: 0 } }, h('div', { class: 'row' }, ic('chat', 20), h('h3', {}, 'Tutor')), h('span', { class: 'tiny faint' }, 'IA Claude, da Anthropic')),
+      h('div', { class: 'card-title', style: { marginBottom: 0 } }, h('div', { class: 'row' }, ic('chat', 20), h('h3', {}, 'Tutor')), h('a', { class: 'tiny link-btn', href: '#/perfil' }, 'escolher IA')),
       chatPanel({ suggestions: SUGGESTIONS }),
     ),
   );
@@ -1116,6 +1116,7 @@ function chatPanel({ suggestions = [], context = '' } = {}) {
     conversation.push({ role: 'user', content, display: text });
     const reply = { role: 'assistant', content: '' };
     conversation.push(reply);
+    if (conversation.length === 2) put(wrap, ...chatChildren()); // some as sugestões, mostra "Nova conversa"
     renderLog();
     const bubble = log.lastChild;
     let raf = 0;
@@ -1134,7 +1135,7 @@ function chatPanel({ suggestions = [], context = '' } = {}) {
       if (!reply.content) conversation.splice(-2, 2); // descarta a pergunta sem resposta
       renderLog();
       log.append(h('div', { class: 'msg err' }, e.message));
-      if (e.code === 'setup') put(wrap, setupCard(() => put(wrap, ...chatChildren())));
+      if (e.code === 'setup') put(wrap, tutorSettings({ compact: true, onDone: () => { put(wrap, ...chatChildren()); renderLog(); } }));
     } finally {
       busy = false;
       send.disabled = false;
@@ -1145,7 +1146,10 @@ function chatPanel({ suggestions = [], context = '' } = {}) {
   send.onclick = () => { const t = ta.value; ta.value = ''; ask(t); };
   ta.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send.click(); } });
 
+  const modeLine = h('div', { class: 'tiny faint' });
+  tutorMode().then((m) => { if (m) put(modeLine, `Respondendo com ${activeLabel(m)} · `, h('a', { href: '#/perfil', class: 'link-btn tiny' }, 'trocar IA')); });
   const chatChildren = () => [
+    modeLine,
     conversation.length ? h('div', { class: 'spread' }, h('span', { class: 'tiny faint' }, 'As respostas podem conter erros. Confira no app.'),
       h('button', { class: 'btn ghost sm', onclick: () => { controller?.abort(); conversation = []; renderLog(); put(wrap, ...chatChildren()); } }, ic('reset', 14), 'Nova conversa')) : null,
     log,
@@ -1154,27 +1158,83 @@ function chatPanel({ suggestions = [], context = '' } = {}) {
   ];
 
   tutorMode().then((mode) => {
-    if (!mode) put(wrap, setupCard(() => put(wrap, ...chatChildren())));
+    if (!mode) put(wrap, tutorSettings({ compact: true, onDone: () => { put(wrap, ...chatChildren()); renderLog(); } }));
     else { put(wrap, ...chatChildren()); renderLog(); }
   });
   return wrap;
 }
 
-function setupCard(onDone) {
-  const key = h('input', { type: 'password', placeholder: 'sk-ant-...', 'aria-label': 'Chave de API da Anthropic', autocomplete: 'off', style: { flex: 1, minWidth: '0' } });
-  return h('div', { class: 'stack' },
-    h('p', { class: 'muted' }, 'O tutor usa a IA Claude. Para ativá-lo, crie uma chave de API da Anthropic (cobrada por uso, em geral centavos por pergunta) e cole abaixo. A chave fica salva somente neste aparelho e é enviada apenas para a Anthropic.'),
-    h('p', { class: 'small faint' }, 'Onde criar: console.anthropic.com → API Keys'),
-    h('div', { class: 'row' }, key, h('button', {
-      class: 'btn primary',
-      onclick: () => {
-        if (!/^sk-ant-/.test(key.value.trim())) { toast('A chave deve começar com sk-ant-', 'bad'); return; }
-        store.setTutorKey(key.value);
-        toast('Tutor ativado');
-        onDone();
-      },
-    }, 'Ativar tutor')),
-  );
+// Painel para escolher e configurar a IA do tutor (Perfil e chat).
+function tutorSettings({ onDone = null, compact = false } = {}) {
+  const wrap = h('div', { class: 'stack' });
+  let sel = tutorConfig().provider || 'gemini';
+
+  const draw = () => {
+    const p = PROVIDERS[sel];
+    const status = h('div', { class: 'small' });
+    const keyInput = p.noKey ? null : h('input', {
+      type: 'password', id: `tutor-key-${sel}`, placeholder: p.optionalKey ? 'Chave (se o servidor exigir)' : p.keyHint, autocomplete: 'off',
+      'aria-label': `Chave de API do ${p.name}`, value: keyOf(sel),
+    });
+    const baseInput = p.editableBase ? h('input', { type: 'text', id: 'tutor-base', placeholder: 'https://seu-servidor/v1', 'aria-label': 'Endereço da API', value: baseUrlOf(sel) }) : null;
+    const modelInput = h('input', { type: 'text', id: `tutor-model-${sel}`, placeholder: p.defaultModel || 'escolhido automaticamente', 'aria-label': 'Modelo', value: modelOf(sel), list: `tutor-models-${sel}` });
+    const modelList = h('datalist', { id: `tutor-models-${sel}` });
+    const persist = () => {
+      if (keyInput) store.setTutorKey(sel, keyInput.value);
+      if (baseInput) store.setTutorBase(sel, baseInput.value);
+      store.setTutorModel(sel, modelInput.value);
+    };
+    const fetchModels = async () => {
+      persist();
+      put(status, h('span', { class: 'loading faint' }, 'Buscando modelos...'));
+      try {
+        const list = await listModels(sel);
+        put(modelList, list.map((m) => h('option', { value: m })));
+        if (!modelInput.value) { modelInput.value = pickModel(sel, list); store.setTutorModel(sel, modelInput.value); }
+        put(status, h('span', { style: { color: 'var(--good)' } }, `${list.length} modelos disponíveis. Toque no campo Modelo para escolher.`));
+      } catch (e) {
+        put(status, h('span', { style: { color: 'var(--bad)' } }, e.message));
+      }
+    };
+    const activate = async () => {
+      persist();
+      if (!isConfigured(sel)) { put(status, h('span', { style: { color: 'var(--bad)' } }, p.editableBase ? 'Informe o endereço da API.' : 'Cole a chave de API.')); return; }
+      store.setTutorProvider(sel);
+      put(status, h('span', { class: 'loading faint' }, 'Testando conexão...'));
+      try {
+        await testConnection(sel);
+        put(status, h('span', { style: { color: 'var(--good)' } }, `Conectado: ${activeLabel(sel)}`));
+        toast(`Tutor ativado com ${p.name}`);
+        setTimeout(() => onDone?.(), 600);
+      } catch (e) {
+        put(status, h('span', { style: { color: 'var(--bad)' } }, e.message));
+      }
+    };
+
+    put(wrap,
+      compact ? null : h('p', { class: 'small muted' }, 'Conecte a IA que você já usa. As chaves ficam salvas somente neste aparelho, são enviadas apenas ao provedor escolhido e não entram no backup. O uso é cobrado pelo provedor (o Gemini e o Groq têm cotas gratuitas).'),
+      h('div', { class: 'provider-grid', role: 'radiogroup', 'aria-label': 'Provedor de IA' }, PROVIDER_ORDER.map((id) => {
+        const q = PROVIDERS[id];
+        return h('button', {
+          class: `provider ${sel === id ? 'active' : ''}`, role: 'radio', 'aria-checked': String(sel === id),
+          onclick: () => { sel = id; draw(); },
+        }, h('strong', {}, q.name), h('span', { class: 'tiny faint' }, q.vendor),
+          tutorConfig().provider === id && isConfigured(id) ? h('span', { class: 'badge good pill' }, 'em uso') : keyOf(id) ? h('span', { class: 'badge pill' }, 'configurado') : null);
+      })),
+      h('div', { class: 'stack', style: { gap: '10px' } },
+        baseInput ? h('label', { class: 'field' }, h('span', { class: 'small', style: { fontWeight: 600 } }, 'Endereço da API (compatível com OpenAI)'), baseInput) : null,
+        keyInput ? h('label', { class: 'field' }, h('span', { class: 'small', style: { fontWeight: 600 } }, `Chave de API do ${p.name}`), keyInput) : h('p', { class: 'small muted' }, `O ${p.name} roda no seu computador e não precisa de chave. Instale em ollama.com, baixe um modelo (ex.: ollama pull llama3.2) e permita chamadas do app: OLLAMA_ORIGINS=* ollama serve.`),
+        p.keyUrl && keyInput ? h('span', { class: 'tiny faint' }, `Onde criar: ${p.keyUrl}`) : null,
+        h('label', { class: 'field' }, h('span', { class: 'small', style: { fontWeight: 600 } }, 'Modelo'), h('div', { class: 'row', style: { flexWrap: 'nowrap' } }, modelInput, h('button', { class: 'btn sm', onclick: fetchModels }, ic('refresh', 14), 'Buscar modelos')), modelList),
+        h('div', { class: 'row' },
+          h('button', { class: 'btn primary', onclick: activate }, 'Usar esta IA'),
+          keyOf(sel) ? h('button', { class: 'btn ghost sm danger', onclick: () => { store.setTutorKey(sel, ''); store.setTutorModel(sel, ''); if (tutorConfig().provider === sel) store.setTutorProvider(''); toast('Chave removida'); draw(); } }, 'Remover chave') : null),
+        status),
+      isDemoRuntime() ? h('p', { class: 'tiny faint' }, 'Nesta demonstração, só o Claude da página funciona (a página não pode chamar outros serviços). No app instalado, todos os provedores funcionam.') : null,
+    );
+  };
+  draw();
+  return wrap;
 }
 
 function openTutorDrawer(cur, preset = '') {
@@ -1414,16 +1474,16 @@ function viewProfile() {
       )),
 
     h('section', { class: 'card' },
-      h('div', { class: 'card-title' }, h('h3', {}, 'Tutor de IA'), s.tutor.apiKey ? h('span', { class: 'badge good' }, 'ativo') : isDemoRuntime() ? h('span', { class: 'badge brand' }, 'via Claude') : h('span', { class: 'badge' }, 'inativo')),
-      s.tutor.apiKey
-        ? h('div', { class: 'spread' }, h('span', { class: 'small muted' }, `Chave salva neste aparelho (termina em …${s.tutor.apiKey.slice(-4)}).`),
-          h('button', { class: 'btn sm danger', onclick: () => { store.setTutorKey(''); toast('Chave removida'); viewProfile(); } }, 'Remover chave'))
-        : isDemoRuntime() ? h('p', { class: 'small muted' }, 'Nesta demonstração o tutor usa o Claude da sua conta, sem chave.')
-          : setupCard(() => viewProfile())),
+      h('div', { class: 'card-title' }, h('h3', {}, 'Tutor de IA'), (() => {
+        const badge = h('span', { class: 'badge' }, 'inativo');
+        tutorMode().then((m) => { if (m) { badge.className = 'badge good'; badge.textContent = activeLabel(m); } });
+        return badge;
+      })()),
+      tutorSettings({ onDone: () => viewProfile() })),
 
     h('section', { class: 'card stack' },
       h('div', { class: 'card-title', style: { marginBottom: 0 } }, h('h3', {}, 'Backup e sincronização')),
-      h('p', { class: 'small muted' }, 'Leve seu progresso do celular para o computador (ou o contrário): exporte o código num aparelho e importe no outro. A chave do tutor não é incluída.'),
+      h('p', { class: 'small muted' }, 'Leve seu progresso do celular para o computador (ou o contrário): exporte o código num aparelho e importe no outro. As chaves das IAs não são incluídas.'),
       h('div', { class: 'row' },
         h('button', {
           class: 'btn sm',

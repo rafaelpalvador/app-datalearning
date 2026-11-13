@@ -69,6 +69,14 @@ sudo apt install ./Datum-*-linux-amd64.deb
 ```
 O Datum aparece no menu de aplicativos, em *Educação*.
 
+## 🤖 Ativar o tutor com a sua IA
+
+1. Crie uma chave no provedor que você prefere. O jeito mais barato de começar é o **Gemini**, que tem cota gratuita: acesse aistudio.google.com/apikey, entre com sua conta Google e toque em **Create API key**.
+2. No Datum: **Perfil → Tutor de IA** → escolha **Gemini** → cole a chave → **Usar esta IA**.
+3. Pronto: use o botão **Dúvida** dentro de qualquer exercício ou a aba **Dúvidas**.
+
+Para trocar de IA, volte ao Perfil e escolha outro provedor; as chaves de cada um ficam guardadas.
+
 ## 🔄 Levar o progresso do celular para o PC
 
 Não há servidor (ainda), então a sincronização é manual:

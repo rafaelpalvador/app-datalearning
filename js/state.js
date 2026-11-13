@@ -54,12 +54,22 @@ function defaults() {
     daily: freshDaily(),
     reminder: { enabled: false, hour: 19, minute: 0 },
     settings: { sound: true, haptics: true, theme: 'system' },
-    tutor: { apiKey: '' },
+    tutor: { provider: '', keys: {}, models: {}, baseUrls: {} },
     totals: { correct: 0, answered: 0, perfectLessons: 0, maxCombo: 0, theoryRead: 0, tutorQuestions: 0 },
   };
 }
 
 let state = null;
+
+// v1.2 guardava só a chave da Anthropic em tutor.apiKey
+function migrateTutor(t) {
+  const out = { provider: t.provider || '', keys: { ...(t.keys || {}) }, models: { ...(t.models || {}) }, baseUrls: { ...(t.baseUrls || {}) } };
+  if (t.apiKey) {
+    out.keys.anthropic = t.apiKey;
+    out.provider ||= 'anthropic';
+  }
+  return out;
+}
 
 export function getState() {
   if (state) return state;
@@ -73,7 +83,7 @@ export function getState() {
       daily: { ...freshDaily(), ...(saved.daily || {}) },
       reminder: { ...d.reminder, ...(saved.reminder || {}) },
       settings: { ...d.settings, ...(saved.settings || {}) },
-      tutor: { ...d.tutor, ...(saved.tutor || {}) },
+      tutor: migrateTutor({ ...d.tutor, ...(saved.tutor || {}) }),
       topics: saved.topics || {},
     };
     // limpeza de campos de versões anteriores (ofensiva, vidas, gemas)
@@ -252,8 +262,27 @@ export function setSetting(key, value) {
   save();
 }
 
-export function setTutorKey(apiKey) {
-  getState().tutor.apiKey = apiKey.trim();
+export function setTutorProvider(id) {
+  getState().tutor.provider = id;
+  save();
+}
+
+export function setTutorKey(id, key) {
+  const t = getState().tutor;
+  if (key) t.keys[id] = key.trim();
+  else delete t.keys[id];
+  save();
+}
+
+export function setTutorModel(id, model) {
+  const t = getState().tutor;
+  if (model) t.models[id] = model.trim();
+  else delete t.models[id];
+  save();
+}
+
+export function setTutorBase(id, url) {
+  getState().tutor.baseUrls[id] = url.trim();
   save();
 }
 
@@ -296,7 +325,7 @@ export function resetProgress() {
 
 // ───────────── backup / sincronização manual entre aparelhos
 export function exportCode() {
-  const { tutor, ...rest } = getState(); // a chave da API nunca sai do aparelho
+  const { tutor, ...rest } = getState(); // as chaves de API nunca saem do aparelho
   return 'DL1:' + btoa(unescape(encodeURIComponent(JSON.stringify(rest))));
 }
 

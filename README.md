@@ -33,9 +33,23 @@ Os apps são compilados automaticamente pelo **GitHub Actions** a cada push (aba
 - **No celular**: navegação inferior, barra de símbolos acima do teclado, vibração, lembrete diário e botão voltar do Android
 - **Backup/sincronização** entre celular e PC por código de exportação
 
-### Tutor de IA
+### Tutor de IA: conecte a sua IA
 
-O tutor usa o SDK oficial da Anthropic (modelo Claude Opus 5.5, com fallback automático do servidor em caso de recusa). Para ativar, cole sua chave de API em **Perfil → Tutor de IA**: ela fica salva só no aparelho e é enviada apenas para a Anthropic. O resto do app funciona sem chave e sem internet.
+Em **Perfil → Tutor de IA**, escolha o provedor, cole a sua chave e toque em **Usar esta IA** (o app testa a conexão). O botão **Buscar modelos** lista os modelos disponíveis na sua conta.
+
+| Provedor | Chave | Observação |
+|---|---|---|
+| **Gemini** (Google) | aistudio.google.com/apikey | tem cota gratuita |
+| **ChatGPT** (OpenAI) | platform.openai.com/api-keys | |
+| **Claude** (Anthropic) | console.anthropic.com | SDK oficial, Claude Opus 5.5 por padrão, com fallback automático do servidor |
+| **OpenRouter** | openrouter.ai/keys | uma chave para centenas de modelos |
+| **Groq** | console.groq.com/keys | modelos abertos, muito rápido, tem cota gratuita |
+| **Mistral** | console.mistral.ai | |
+| **DeepSeek** | platform.deepseek.com | |
+| **Ollama** | sem chave | IA local no computador (`OLLAMA_ORIGINS=* ollama serve`) |
+| **Outro** | opcional | qualquer API compatível com a OpenAI (LM Studio, vLLM, Together...) |
+
+As chaves ficam salvas só no aparelho, são enviadas apenas ao provedor escolhido e não entram no backup. O resto do app funciona sem IA e sem internet.
 
 ## Como funciona
 
