@@ -3,6 +3,8 @@
 Para cada exercício: setup + solução + testes precisa passar,
 e setup + código inicial + testes precisa FALHAR.
 """
+import contextlib
+import io
 import json
 import os
 import sys
@@ -12,13 +14,16 @@ os.environ["MPLBACKEND"] = "Agg"
 here = os.path.dirname(os.path.abspath(__file__))
 steps = json.load(open(os.path.join(here, ".python-steps.json"), encoding="utf-8"))
 errors = []
+import tempfile
+os.chdir(tempfile.mkdtemp())  # exemplos que gravam arquivos não sujam o repositório
 
 
 def run(step, code):
     ns = {}
-    exec(step["setup"] or "", ns)
-    exec(code, ns)
-    exec(step["tests"], ns)
+    with contextlib.redirect_stdout(io.StringIO()):
+        exec(step["setup"] or "", ns)
+        exec(code, ns)
+        exec(step["tests"], ns)
 
 
 for step in steps:
@@ -26,10 +31,13 @@ for step in steps:
         run(step, step["solution"])
     except Exception:
         errors.append(f"{step['where']}: solução falhou\n{traceback.format_exc(limit=2)}")
-    try:
+    if step["starter"] is None:  # exemplo resolvido: só precisa rodar
+        pass
+    else:
+      try:
         run(step, step["starter"] or "")
         errors.append(f"{step['where']}: o código inicial já passa nos testes")
-    except Exception:
+      except Exception:
         pass
     try:
         import matplotlib.pyplot as plt

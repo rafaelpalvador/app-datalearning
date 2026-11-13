@@ -28,6 +28,17 @@ for (const course of COURSES) {
           case 'theory':
             if (!step.title || !step.md) errors.push(`${where}: teoria sem título/conteúdo`);
             break;
+          case 'example':
+            if (!step.title || !step.code) errors.push(`${where}: exemplo sem título/código`);
+            if (step.lang === 'sql') {
+              const db = createDb(SQL);
+              try { const r = db.exec(step.code); if (!r.length || !r[r.length - 1].values.length) errors.push(`${where}: exemplo SQL sem resultado`); }
+              catch (e) { errors.push(`${where}: exemplo SQL com erro: ${e.message}`); }
+              finally { db.close(); }
+            } else if (step.lang === 'python') {
+              pySteps.push({ where, setup: step.setup, solution: step.code, starter: null, tests: '' });
+            } else errors.push(`${where}: linguagem do exemplo inválida`);
+            break;
           case 'quiz':
             if (!(step.answer >= 0 && step.answer < step.options.length)) errors.push(`${where}: resposta fora do intervalo`);
             break;

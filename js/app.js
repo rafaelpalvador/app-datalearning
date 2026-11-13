@@ -134,7 +134,7 @@ function courseProgress(course) {
 }
 
 const lessonCounts = (lesson) => ({
-  theory: lesson.steps.filter((s) => s.type === 'theory').length,
+  theory: lesson.steps.filter((s) => s.type === 'theory' || s.type === 'example').length,
   practice: lesson.steps.filter((s) => EXERCISE_TYPES.has(s.type)).length,
 });
 
@@ -468,6 +468,42 @@ const renderers = {
     return {
       el: h('div', { class: 'step theory' }, kindLabel([ic('reader', 15), 'Teoria']),
         h('div', { class: 'theory-card' }, h('div', { class: 'stack', style: { gap: '14px' } }, h('h2', {}, step.title), h('div', { class: 'md', html: renderMarkdown(step.md) })))),
+    };
+  },
+
+  example(step) {
+    const out = h('div', { class: 'output' });
+    const isSql = step.lang === 'sql';
+    const run = async () => {
+      put(out, h('div', { class: 'small faint loading' }, isSql ? 'Executando...' : 'Preparando o Python...'));
+      if (isSql) {
+        const db = await freshDb();
+        try { put(out, resultTable(runQuery(db, editor.value))); }
+        catch (e) { put(out, h('pre', { class: 'error' }, `Erro: ${e.message}`)); }
+        finally { db.close(); }
+      } else {
+        try { pythonOutput(out, await runPython({ setup: step.setup, code: editor.value, packages: step.packages, onStatus: (m) => put(out, h('div', { class: 'small faint loading' }, m)) })); }
+        catch (e) { put(out, h('pre', { class: 'error' }, e.message)); }
+      }
+    };
+    const wrap = codeEditor(step.code, step.lang, run);
+    const editor = wrap.textarea;
+    if (isSql) setTimeout(run, 30);
+    const dataPanel = step.setup ? h('details', { class: 'panel' },
+      h('summary', {}, ic('table', 16), 'Dados usados no exemplo'),
+      h('div', { class: 'panel-body' }, step.setupNote ? h('p', { html: inline(step.setupNote) }) : h('pre', { class: 'code' }, h('code', { html: highlight(step.setup.trim(), 'python') })))) : null;
+    return {
+      el: h('div', { class: 'step theory' }, kindLabel([ic('play', 15), 'Exemplo resolvido']),
+        h('div', { class: 'theory-card' }, h('div', { class: 'stack', style: { gap: '14px' } },
+          h('h2', {}, step.title),
+          step.md ? h('div', { class: 'md', html: renderMarkdown(step.md) }) : null,
+          isSql ? schemaPanel() : dataPanel,
+          wrap,
+          h('div', { class: 'row' }, h('button', { class: 'btn sm', onclick: run }, ic('play', 15), isSql ? 'Executar de novo' : 'Executar exemplo'), h('span', { class: 'tiny faint' }, 'Altere o código e execute para experimentar')),
+          out,
+          step.after ? h('div', { class: 'md', html: renderMarkdown(step.after) }) : null))),
+      code: true,
+      getCode: () => editor.value,
     };
   },
 
@@ -1008,6 +1044,10 @@ function buildIndex() {
       for (const l of u.lessons) {
         l.steps.forEach((s) => {
           if (s.type === 'theory') searchIndex.push({ kind: 'Teoria', title: s.title, md: s.md, courseId: c.id, where: `${c.title} · ${l.title}`, lessonId: l.id, hay: norm(`${s.title} ${s.md}`) });
+          if (s.type === 'example') {
+            const md = `${s.md}\n\n~~~${s.lang}\n${s.code}\n~~~\n\n${s.after}`;
+            searchIndex.push({ kind: 'Exemplo', title: s.title, md, courseId: c.id, where: `${c.title} · ${l.title}`, lessonId: l.id, hay: norm(`${s.title} ${md}`) });
+          }
         });
       }
     }

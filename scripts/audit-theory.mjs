@@ -45,6 +45,7 @@ for (const course of COURSES) {
     for (const lesson of unit.lessons) {
       lesson.steps.forEach((step, i) => {
         if (step.type === 'theory') { theoryText += '\n' + step.title + '\n' + unescape(step.md); return; }
+        if (step.type === 'example') { theoryText += '\n' + step.title + '\n' + unescape(step.md) + '\n' + step.code + '\n' + unescape(step.after); return; }
         const tNorm = norm(theoryText);
         const tUp = theoryText.toUpperCase();
         let terms = [];
@@ -56,7 +57,7 @@ for (const course of COURSES) {
           terms = [...sqlTermsIn(step.code || ''), ...sqlTermsIn((step.tokens || []).join(' ')), ...backticks.flatMap((b) => pyTermsIn(b))];
         }
         const missing = [...new Set(terms)].filter((t) => !inTheory(t, tNorm, tUp));
-        const noTheoryYet = !lesson.steps.slice(0, i).some((s) => s.type === 'theory');
+        const noTheoryYet = !lesson.steps.slice(0, i).some((s) => s.type === 'theory' || s.type === 'example');
         if (missing.length || noTheoryYet) report.push({ where: `${lesson.id} #${i + 1} ${step.type}`, title: lesson.title, missing, noTheoryYet });
       });
     }

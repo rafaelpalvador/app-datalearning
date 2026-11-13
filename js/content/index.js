@@ -4,13 +4,40 @@ import { STATS_COURSE } from './stats-course.js';
 import { SQL_THEORY } from './theory-sql.js';
 import { PY_THEORY } from './theory-python.js';
 import { STATS_THEORY } from './theory-stats.js';
+import { SQL_PLUS } from './sql-plus.js';
+import { PY_PLUS } from './py-plus.js';
+import { STATS_PLUS } from './stats-plus.js';
 
 export const COURSES = [SQL_COURSE, PYTHON_COURSE, STATS_COURSE];
 
 // Teoria antes da prática: os cards de aprofundamento entram logo depois da teoria
 // de abertura da lição, antes do primeiro exercício. Um card com { before: n } entra
 // antes do passo n (índice original), para explicar um exercício do meio da lição.
-const EXTRA_THEORY = { ...SQL_THEORY, ...PY_THEORY, ...STATS_THEORY };
+// Conteúdo adicional (*-plus.js): { examples: {lessonId: [passos]}, lessons: [{unit, after?, lesson}], units: [{after|before, unit}] }
+const PLUS = { sql: SQL_PLUS, python: PY_PLUS, stats: STATS_PLUS };
+for (const course of COURSES) {
+  const plus = PLUS[course.id];
+  if (!plus || course._plusMerged) continue;
+  course._plusMerged = true;
+  for (const { after, before, unit } of plus.units || []) {
+    const i = course.units.findIndex((u) => u.id === (after || before));
+    if (i < 0) throw new Error(`unidade de referência não encontrada: ${after || before}`);
+    course.units.splice(after ? i + 1 : i, 0, unit);
+  }
+  for (const { unit: unitId, after, first, lesson } of plus.lessons || []) {
+    const unit = course.units.find((u) => u.id === unitId);
+    if (!unit) throw new Error(`unidade não encontrada: ${unitId}`);
+    if (first) unit.lessons.unshift(lesson);
+    else if (after) unit.lessons.splice(unit.lessons.findIndex((l) => l.id === after) + 1, 0, lesson);
+    else unit.lessons.push(lesson);
+  }
+}
+const mergeMaps = (...maps) => {
+  const out = {};
+  for (const m of maps) for (const [k, v] of Object.entries(m || {})) out[k] = [...(out[k] || []), ...v];
+  return out;
+};
+const EXTRA_THEORY = mergeMaps(SQL_THEORY, PY_THEORY, STATS_THEORY, SQL_PLUS.examples, PY_PLUS.examples, STATS_PLUS.examples);
 for (const course of COURSES) {
   for (const unit of course.units) {
     for (const lesson of unit.lessons) {

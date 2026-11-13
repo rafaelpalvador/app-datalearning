@@ -6,8 +6,17 @@
 //   fill    – completar lacunas (___) em um código
 //   sql     – escrever uma query; o resultado é comparado ao da solução
 //   python  – escrever código Python; testes (asserts) validam a resposta
+//   example – exemplo resolvido: explicação + código executável + resultado real + comentário
 
 export const theory = (title, md) => ({ type: 'theory', title, md });
+
+// Exemplo resolvido (não vale nota): mostra o código rodando ANTES dos exercícios.
+//   lang: 'sql' | 'python'; md: explicação antes do código; after: leitura do resultado
+//   opts: { setup, setupNote, packages } (Python)
+export const example = (title, md, lang, code, after = '', opts = {}) =>
+  ({ type: 'example', title, md, lang, code: code.trim(), after, setup: opts.setup ?? '', setupNote: opts.setupNote ?? '', packages: opts.packages ?? [] });
+export const exSql = (title, md, code, after = '') => example(title, md, 'sql', code, after);
+export const exPy = (title, md, code, after = '', opts = {}) => example(title, md, 'python', code, after, opts);
 
 export const quiz = (question, options, answer, explanation = '', code = '') =>
   ({ type: 'quiz', question, options, answer, explanation, code });
