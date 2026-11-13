@@ -1,6 +1,6 @@
-# 📊 DataLingo
+# Datum
 
-App estilo Duolingo para aprender **SQL** e **Python para análise de dados**, com lições curtas, gamificação e exercícios que **rodam de verdade** — SQLite e Python (pandas, NumPy, matplotlib...) embutidos, funcionando **offline**.
+Aprenda **SQL**, **Python** e **estatística para análise de dados** com teoria curta, muita prática e correção na hora. Gamificado (XP, níveis de carreira, missões e conquistas), com SQLite e Python (pandas, NumPy, matplotlib) embutidos, funcionando **offline**.
 
 | Plataforma | Formato | Instalação |
 |---|---|---|
@@ -9,24 +9,32 @@ App estilo Duolingo para aprender **SQL** e **Python para análise de dados**, c
 | 🐧 Linux | `.AppImage` + `.deb` | [docs/INSTALACAO.md](docs/INSTALACAO.md#-linux) |
 | 🌐 Navegador | site estático | `npm start` |
 
-Os apps são compilados automaticamente pelo **GitHub Actions** a cada push (aba *Actions* → *Artifacts*) e publicados em *Releases* quando uma tag `v*` é criada.
+Os apps são compilados automaticamente pelo **GitHub Actions** a cada push (aba *Actions* → *Artifacts*) e publicados em *Releases* (versão do `package.json`), de onde o Obtainium baixa as atualizações.
 
 ## Conteúdo
 
-- 🗄️ **SQL do Zero ao Avançado**: 9 unidades, 24 lições (SELECT → window functions, CTE recursiva, índices, coorte, Pareto e funil)
-- 🐍 **Python para Análise de Dados**: 9 unidades, 21 lições (Python, NumPy, pandas, limpeza, séries temporais, visualização, APIs, scraping, SQL + Python, estatística)
-- 💼 **Modo entrevista**: 16 problemas clássicos de processos seletivos, cronometrados (fácil/médio/difícil)
-- **258 passos + 16 problemas**: teoria, quizzes, leitura de código, montar blocos, completar lacunas, "encontre o bug", 82 exercícios de SQL e 51 de Python — todos validados automaticamente
+- **SQL do Zero ao Avançado**: 9 unidades, 24 lições (SELECT → window functions, CTE recursiva, índices, coorte, Pareto e funil)
+- **Python para Análise de Dados**: 9 unidades, 21 lições (Python, NumPy, pandas, limpeza, séries temporais, visualização, APIs, scraping, SQL + Python, estatística)
+- **Estatística para Dados**: 6 unidades, 15 lições (descritiva, probabilidade, normal e binomial, intervalos de confiança, bootstrap, testes de hipótese e A/B, correlação, regressão, séries temporais e anomalias)
+- **Entrevistas**: 68 problemas cronometrados, separados em **SQL (40)** e **Python (28)** e em 4 níveis (Júnior, Pleno, Sênior, Especialista), cada um com a explicação de como pensar e uma solução de referência
+- **Dados para estatística**: além da loja, tabelas grandes geradas de forma determinística: teste A/B com 2.000 usuários, 1.098 dias de vendas em 3 lojas (com sazonalidade e outliers) e 420 avaliações; os mesmos dados ficam disponíveis no SQL e como DataFrames no Python
+- **343 passos**: 78 cards de teoria e 265 exercícios de prática (89 questões, 97 de SQL, 68 de Python, montar blocos e completar lacunas), todos validados automaticamente
 
-## Dinâmica de aprendizado
+## Dinâmica
 
+- **Teoria e prática em toda lição**: cada lição mostra quantos cards de teoria e quantos exercícios tem
 - **Trilha com desbloqueio** e **checkpoint por unidade** (acerte 80% e pule a unidade)
-- **Revisão espaçada (SM-2)**: cada exercício vira um card que volta na hora certa de ser relembrado
-- **Variações automáticas** de exercícios na prática, para não decorar respostas
-- **Explicação do erro**: o corretor compara o resultado e diz *por quê* errou (linhas duplicadas por JOIN, filtro faltando, INNER × LEFT JOIN, NULL, arredondamento, ordem...) e traduz erros do SQLite/Python para português
-- **Gamificação**: XP, ofensiva, meta diária, vidas, gemas, **missões diárias**, **20 conquistas**, **protetor de ofensiva**, estrelas por lição, força por unidade
-- **No celular**: navegação inferior, barra de símbolos acima do teclado, vibração, sons, **lembrete diário** por notificação e botão voltar do Android
+- **Revisão espaçada (SM-2)** e **domínio por unidade**
+- **Explicação do erro**: o corretor diz *por quê* errou (duplicação por JOIN, filtro faltando, INNER × LEFT, NULL, arredondamento, ordem) e traduz erros do SQLite/Python
+- **Tirar dúvidas**: busca em toda a teoria e nas explicações das entrevistas, e um **tutor de IA** (Claude) que você chama de dentro de qualquer exercício; ele vê o enunciado e o seu código e dá dicas antes de entregar a resposta
+- **Gamificação sem punição**: XP, **níveis de carreira** (Estagiário → Head de Dados), estrelas por lição, missões diárias e 25 conquistas. Sem ofensivas, vidas ou gemas
+- **Estatísticas do aluno**: XP por semana, acerto por trilha, atividade, teoria estudada e entrevistas resolvidas
+- **No celular**: navegação inferior, barra de símbolos acima do teclado, vibração, lembrete diário e botão voltar do Android
 - **Backup/sincronização** entre celular e PC por código de exportação
+
+### Tutor de IA
+
+O tutor usa o SDK oficial da Anthropic (modelo Claude Opus 5.5, com fallback automático do servidor em caso de recusa). Para ativar, cole sua chave de API em **Perfil → Tutor de IA**: ela fica salva só no aparelho e é enviada apenas para a Anthropic. O resto do app funciona sem chave e sem internet.
 
 ## Como funciona
 
@@ -36,7 +44,7 @@ Os apps são compilados automaticamente pelo **GitHub Actions** a cada push (aba
 | Python de verdade | [Pyodide](https://pyodide.org) (CPython em WebAssembly) com pandas, NumPy, matplotlib, BeautifulSoup, sqlite3... carregado do CDN na 1ª execução |
 | Correção de SQL | executa a query do aluno e a solução num banco novo e compara os resultados (aceita qualquer query equivalente, ignora nomes de colunas; a ordem só importa quando o enunciado pede) |
 | Correção de Python | executa setup + código do aluno + testes (`assert`) |
-| Gamificação | XP, ofensiva (dias seguidos), meta diária, 5 vidas (recarregam 1 a cada 30 min), estrelas por lição, revisão de erros que devolve vidas, prática rápida, histórico de atividade |
+| Gamificação | XP, níveis de carreira, meta diária, estrelas, missões e conquistas |
 | Progresso | salvo no aparelho (`localStorage`); backup por código em Perfil |
 | Desktop | Electron com protocolo `app://` (`desktop/`), empacotado com electron-builder |
 | Android | Capacitor 7 (`android/`), plugins de notificação, vibração, status bar e botão voltar |
@@ -71,8 +79,10 @@ index.html
 css/styles.css
 js/
   app.js                 # rotas, trilha, player, praticar, entrevista, conquistas, perfil
-  state.js               # XP, ofensiva, vidas, gemas, revisão espaçada, backup
+  state.js               # XP, níveis, revisão espaçada, estatísticas, backup
   gamification.js        # missões diárias e conquistas
+  tutor.js               # tutor de IA (SDK da Anthropic / Claude da página na demo)
+  icons.js               # ícones Lucide (ISC)
   platform.js            # Android/desktop: notificações, vibração, voltar, sons
   markdown.js            # renderizador de teoria + realce de sintaxe
   engines/sql-engine.js  # sql.js + comparação de resultados
@@ -82,7 +92,8 @@ js/
     datasets.js          # banco da loja DataShop + DataFrame de vendas
     sql-course.js
     python-course.js
-    interview.js         # modo entrevista
+    stats-course.js      # trilha de estatística
+    interview.js         # entrevistas SQL e Python por nível
 desktop/                 # app de desktop (Electron)
 android/                 # app Android (Capacitor)
 assets/                  # ícones e splash

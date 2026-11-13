@@ -122,12 +122,137 @@ INSERT INTO funcionarios VALUES
  (10,'Rafael Moura','Gerente de Contas','Comercial',11000,3,'2020-04-14');
 `;
 
+// ───────────── Tabelas maiores para estatística e entrevistas
+// Geradas de forma determinística (mesma semente → mesmos dados em qualquer aparelho).
+function rng(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+const r2 = (x) => Math.round(x * 100) / 100;
+function gauss(rand) {
+  // Box-Muller
+  const u = Math.max(rand(), 1e-12);
+  const v = rand();
+  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
+}
+
+function buildStatsData() {
+  // 1) teste A/B do novo checkout: 2.000 usuários
+  const ab = [];
+  {
+    const rand = rng(2024);
+    const devices = ['mobile', 'desktop', 'tablet'];
+    for (let i = 1; i <= 2000; i++) {
+      const grupo = i % 2 === 0 ? 'B' : 'A';
+      const disp = devices[rand() < 0.62 ? 0 : rand() < 0.85 ? 1 : 2];
+      const base = grupo === 'A' ? 0.10 : 0.13;
+      const conv = rand() < base + (disp === 'desktop' ? 0.02 : 0) ? 1 : 0;
+      const valor = conv ? r2(Math.max(20, 180 + gauss(rand) * 60 + (grupo === 'B' ? 8 : 0))) : 0;
+      const dia = 1 + Math.floor(rand() * 28);
+      ab.push([i, grupo, disp, conv, valor, `2024-09-${String(dia).padStart(2, '0')}`]);
+    }
+  }
+  // 2) vendas diárias de 2024 em 3 lojas (sazonalidade semanal e de fim de ano)
+  const diarias = [];
+  {
+    const rand = rng(77);
+    const lojas = [['Centro', 1.0], ['Shopping', 1.35], ['Online', 1.8]];
+    const start = Date.UTC(2024, 0, 1);
+    for (let d = 0; d < 366; d++) {
+      const dt = new Date(start + d * 86400000);
+      const iso = dt.toISOString().slice(0, 10);
+      const dow = dt.getUTCDay();
+      const mes = dt.getUTCMonth();
+      const semana = dow === 0 ? 0.7 : dow === 6 ? 1.25 : dow === 5 ? 1.15 : 1;
+      const sazonal = mes === 10 ? 1.35 : mes === 11 ? 1.6 : mes === 0 ? 0.85 : 1;
+      for (const [loja, f] of lojas) {
+        const visitantes = Math.round(Math.max(50, (420 * f * semana * sazonal) + gauss(rand) * 45));
+        const taxa = Math.min(0.2, Math.max(0.02, 0.075 + gauss(rand) * 0.012));
+        const pedidos = Math.max(1, Math.round(visitantes * taxa));
+        const ticket = 145 + gauss(rand) * 18 + (loja === 'Online' ? -12 : 0);
+        const outlier = rand() < 0.004 ? 4 : 1; // raros dias atípicos (outliers)
+        diarias.push([iso, loja, visitantes, pedidos, r2(pedidos * ticket * outlier)]);
+      }
+    }
+  }
+  // 3) avaliações de produtos (notas 1–5)
+  const aval = [];
+  {
+    const rand = rng(5);
+    const qualidade = { 1: 4.4, 2: 4.1, 3: 4.6, 4: 4.3, 5: 4.5, 6: 3.6, 7: 4.0, 8: 3.1, 9: 4.2, 10: 4.7, 11: 4.8, 12: 3.9 };
+    for (let i = 1; i <= 420; i++) {
+      const prod = 1 + Math.floor(rand() * 12);
+      const cli = 1 + Math.floor(rand() * 10);
+      const nota = Math.min(5, Math.max(1, Math.round(qualidade[prod] + gauss(rand) * 0.9)));
+      const mes = 1 + Math.floor(rand() * 9);
+      const dia = 1 + Math.floor(rand() * 28);
+      aval.push([i, prod, cli, nota, `2024-${String(mes).padStart(2, '0')}-${String(dia).padStart(2, '0')}`]);
+    }
+  }
+  return { ab, diarias, aval };
+}
+
+const STATS = buildStatsData();
+const sqlVal = (v) => (typeof v === 'string' ? `'${v}'` : String(v));
+const sqlRows = (rows) => rows.map((r) => `(${r.map(sqlVal).join(',')})`).join(',');
+const csv = (header, rows) => [header, ...rows.map((r) => r.join(','))].join('\n');
+
+export const STATS_SQL = `
+CREATE TABLE experimento_ab (
+  usuario_id INTEGER PRIMARY KEY,
+  grupo TEXT NOT NULL,          -- 'A' = checkout atual, 'B' = checkout novo
+  dispositivo TEXT NOT NULL,
+  converteu INTEGER NOT NULL,   -- 1 = comprou, 0 = não comprou
+  valor_compra REAL NOT NULL,   -- 0 quando não comprou
+  data_acesso TEXT NOT NULL
+);
+INSERT INTO experimento_ab VALUES ${sqlRows(STATS.ab)};
+CREATE TABLE vendas_diarias (
+  data TEXT NOT NULL,
+  loja TEXT NOT NULL,
+  visitantes INTEGER NOT NULL,
+  pedidos INTEGER NOT NULL,
+  receita REAL NOT NULL,
+  PRIMARY KEY (data, loja)
+);
+INSERT INTO vendas_diarias VALUES ${sqlRows(STATS.diarias)};
+CREATE TABLE avaliacoes (
+  id INTEGER PRIMARY KEY,
+  produto_id INTEGER NOT NULL REFERENCES produtos(id),
+  cliente_id INTEGER NOT NULL REFERENCES clientes(id),
+  nota INTEGER NOT NULL CHECK (nota BETWEEN 1 AND 5),
+  data_avaliacao TEXT NOT NULL
+);
+INSERT INTO avaliacoes VALUES ${sqlRows(STATS.aval)};
+`;
+export const DB_SQL = LOJA_SQL + '\n' + STATS_SQL;
+
+// Os mesmos dados como DataFrames do pandas (usados nos exercícios de estatística).
+export const PY_STATS = `
+import io
+import numpy as np
+import pandas as pd
+ab = pd.read_csv(io.StringIO("""${csv('usuario_id,grupo,dispositivo,converteu,valor_compra,data_acesso', STATS.ab)}"""))
+diarias = pd.read_csv(io.StringIO("""${csv('data,loja,visitantes,pedidos,receita', STATS.diarias)}"""), parse_dates=["data"])
+avaliacoes = pd.read_csv(io.StringIO("""${csv('id,produto_id,cliente_id,nota,data_avaliacao', STATS.aval)}"""))
+`;
+export const PY_STATS_NOTE = 'Já carregados: `ab` (teste A/B, 2.000 usuários: grupo, dispositivo, converteu, valor_compra), `diarias` (vendas diárias de 2024 por loja: data, loja, visitantes, pedidos, receita) e `avaliacoes` (420 notas de 1 a 5), além de `pd` e `np`.';
+
 export const SCHEMA_DOC = [
   { tabela: 'clientes', colunas: 'id, nome, email, cidade, estado, data_cadastro' },
   { tabela: 'produtos', colunas: 'id, nome, categoria, preco, estoque' },
   { tabela: 'pedidos', colunas: 'id, cliente_id → clientes.id, data_pedido, status' },
   { tabela: 'itens_pedido', colunas: 'pedido_id → pedidos.id, produto_id → produtos.id, quantidade, preco_unitario' },
   { tabela: 'funcionarios', colunas: 'id, nome, cargo, departamento, salario, gerente_id → funcionarios.id, data_admissao' },
+  { tabela: 'experimento_ab', colunas: 'usuario_id, grupo (A/B), dispositivo, converteu (0/1), valor_compra, data_acesso — 2.000 linhas' },
+  { tabela: 'vendas_diarias', colunas: 'data, loja (Centro/Shopping/Online), visitantes, pedidos, receita — 1.098 linhas (ano de 2024)' },
+  { tabela: 'avaliacoes', colunas: 'id, produto_id → produtos.id, cliente_id → clientes.id, nota (1–5), data_avaliacao — 420 linhas' },
 ];
 
 // Código Python reutilizado como "setup" nos exercícios de pandas.

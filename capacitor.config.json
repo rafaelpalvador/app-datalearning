@@ -1,8 +1,8 @@
 {
   "appId": "app.datalingo.mobile",
-  "appName": "DataLingo",
+  "appName": "Datum",
   "webDir": "dist",
-  "backgroundColor": "#58cc02",
+  "backgroundColor": "#11161c",
   "android": {
     "adjustMarginsForEdgeToEdge": "auto",
     "allowMixedContent": false,
@@ -11,7 +11,7 @@
   "plugins": {
     "LocalNotifications": {
       "smallIcon": "ic_stat_datalingo",
-      "iconColor": "#58cc02"
+      "iconColor": "#2dd4bf"
     },
     "StatusBar": {
       "overlaysWebView": false

@@ -8,8 +8,8 @@ const NP = ['numpy'];
 export const PYTHON_COURSE = {
   id: 'python',
   title: 'Python para Análise de Dados',
-  icon: '🐍',
-  color: '#58cc02',
+  icon: 'code',
+  color: '#059669',
   description: 'Python essencial, NumPy, pandas, limpeza, séries temporais, visualização, extração (arquivos, APIs, scraping, SQL) e estatística.',
   units: [
     // ───────────────────────────── UNIDADE 1

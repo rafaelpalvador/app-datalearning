@@ -1,6 +1,7 @@
 // Renderizador de Markdown mínimo para os cards de teoria.
 // Suporta: títulos, parágrafos, listas, tabelas, citações (dicas), blocos de código (``` ou ~~~),
 // `código`, **negrito** e *itálico*.
+import { icon } from './icons.js';
 
 export function esc(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -96,7 +97,7 @@ export function renderMarkdown(src) {
     } else if (l.startsWith('> ')) {
       const quote = [];
       while (i < lines.length && lines[i].startsWith('> ')) quote.push(lines[i++].slice(2));
-      html += `<div class="tip">💡 ${inline(quote.join(' '))}</div>`;
+      html += `<div class="tip">${icon('lightbulb', 18)}<div>${inline(quote.join(' '))}</div></div>`;
     } else if (!l.trim()) {
       i++;
     } else {

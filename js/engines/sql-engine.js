@@ -1,7 +1,7 @@
 // Motor SQL: SQLite compilado para WebAssembly (sql.js), rodando 100% no navegador.
 // A lógica de comparação é pura para poder ser reutilizada no validador (Node).
 
-import { LOJA_SQL } from '../content/datasets.js';
+import { DB_SQL } from '../content/datasets.js';
 
 let sqlPromise = null;
 
@@ -20,7 +20,7 @@ export async function freshDb() {
 
 export function createDb(SQL) {
   const db = new SQL.Database();
-  db.run(LOJA_SQL);
+  db.run(DB_SQL);
   return db;
 }
 

@@ -43,4 +43,4 @@ export function withVariant(step) {
 
 // opts: { starter, setup, tests, packages, hint }
 export const py = (prompt, solution, tests, opts = {}) =>
-  ({ type: 'python', prompt, solution: solution.trim(), tests: tests.trim(), starter: opts.starter ?? '', setup: opts.setup ?? '', packages: opts.packages ?? [], hint: opts.hint ?? '' });
+  ({ type: 'python', prompt, solution: solution.trim(), tests: tests.trim(), starter: opts.starter ?? '', setup: opts.setup ?? '', setupNote: opts.setupNote ?? '', packages: opts.packages ?? [], hint: opts.hint ?? '' });

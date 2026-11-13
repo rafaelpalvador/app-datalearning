@@ -7,8 +7,8 @@ const root = path.join(__dirname, '..');
 const jobs = [
   ['assets/icon.svg', 'assets/icon.png', 1024, null],
   ['assets/icon-foreground.svg', 'assets/icon-foreground.png', 1024, null],
-  ['assets/icon-foreground.svg', 'assets/splash.png', 2732, '#58cc02'],
-  ['assets/icon-foreground.svg', 'assets/splash-dark.png', 2732, '#131f24'],
+  ['assets/icon-foreground.svg', 'assets/splash.png', 2732, '#11161c'],
+  ['assets/icon-foreground.svg', 'assets/splash-dark.png', 2732, '#0b0d10'],
   ['assets/icon.svg', 'icons/icon-192.png', 192, null],
   ['assets/icon.svg', 'icons/icon-512.png', 512, null],
 ];

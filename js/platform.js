@@ -12,9 +12,9 @@ const plugin = (name) => (isNative() ? cap().Plugins?.[name] : null);
 // ───────────── lembrete diário
 const REMINDER_ID = 4242;
 const MESSAGES = [
-  'Sua ofensiva está esperando! 🔥 5 minutos de SQL hoje?',
-  'Bora praticar? Uma lição curta já conta para a meta. 📊',
-  'Os dados não se analisam sozinhos 😄 Vem fazer sua lição!',
+  'Que tal 10 minutos de SQL hoje? Sua próxima lição está pronta.',
+  'Uma lição curta já conta para a sua meta diária.',
+  'Há exercícios esperando na revisão espaçada. Bora relembrar?',
 ];
 
 export function remindersSupported() {
@@ -31,7 +31,7 @@ export async function scheduleReminder({ enabled, hour, minute }) {
     await ln.schedule({
       notifications: [{
         id: REMINDER_ID,
-        title: 'DataLingo',
+        title: 'Datum',
         body: MESSAGES[Math.floor(Math.random() * MESSAGES.length)],
         schedule: { on: { hour, minute }, repeats: true, allowWhileIdle: true },
         smallIcon: 'ic_stat_datalingo',
@@ -57,7 +57,7 @@ export function startInAppReminderLoop(getState) {
     if (!r?.enabled || s.daily.xp > 0 || lastNotifiedDay === s.daily.day) return;
     if (now.getHours() === r.hour && now.getMinutes() >= r.minute && 'Notification' in window && Notification.permission === 'granted') {
       lastNotifiedDay = s.daily.day;
-      new Notification('DataLingo', { body: MESSAGES[0] });
+      new Notification('Datum', { body: MESSAGES[0] });
     }
   }, 60 * 1000);
 }

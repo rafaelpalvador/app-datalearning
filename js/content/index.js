@@ -1,7 +1,8 @@
 import { SQL_COURSE } from './sql-course.js';
 import { PYTHON_COURSE } from './python-course.js';
+import { STATS_COURSE } from './stats-course.js';
 
-export const COURSES = [SQL_COURSE, PYTHON_COURSE];
+export const COURSES = [SQL_COURSE, PYTHON_COURSE, STATS_COURSE];
 
 export function findLesson(lessonId) {
   for (const course of COURSES) {

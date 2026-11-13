@@ -3,8 +3,8 @@ import { theory, quiz, order, fill, sql, debugSql } from './helpers.js';
 export const SQL_COURSE = {
   id: 'sql',
   title: 'SQL do Zero ao Avançado',
-  icon: '🗄️',
-  color: '#1cb0f6',
+  icon: 'database',
+  color: '#2563eb',
   description: 'Consultas, filtros, agregações, JOINs, subqueries, CTEs, window functions, modelagem, performance e análises de negócio.',
   units: [
     // ───────────────────────────── UNIDADE 1

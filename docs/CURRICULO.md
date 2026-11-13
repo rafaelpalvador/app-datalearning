@@ -1,4 +1,4 @@
-# Currículo completo — DataLingo
+# Currículo completo — Datum
 
 Legenda: ✅ implementado no app · 🔜 próximo lote de conteúdo (planejado)
 
@@ -72,6 +72,28 @@ Cada lição segue o mesmo ciclo pedagógico:
 | 12. Engenharia de dados para analistas | pipelines ETL/ELT, Airflow/Prefect, qualidade de dados (Pandera/Great Expectations), testes com pytest, Git | 🔜 |
 
 ---
+
+## Trilha 3 — Estatística para Dados ✅
+
+| Unidade | Lições |
+|---|---|
+| 1. Estatística descritiva | média, mediana e moda · variância, desvio e CV · quartis, boxplot e outliers (IQR e z-score) |
+| 2. Probabilidade e distribuições | probabilidade e Bayes · normal, z-score e TCL · binomial |
+| 3. Amostragem e intervalos | erro padrão e IC da média · IC de proporções e bootstrap |
+| 4. Testes de hipótese e A/B | hipóteses e p-valor · teste z de duas proporções · t de Welch e armadilhas (espiar, testes múltiplos, Simpson) |
+| 5. Correlação e regressão | Pearson e Spearman · regressão linear e R² |
+| 6. Séries temporais aplicadas | sazonalidade, tendência e médias móveis · detecção de anomalias |
+
+## Entrevistas ✅
+
+68 problemas em 4 níveis, separados por linguagem:
+
+| Nível | SQL | Python |
+|---|---|---|
+| Júnior | 10 | 7 |
+| Pleno | 10 | 7 |
+| Sênior | 10 | 7 |
+| Especialista | 10 | 7 |
 
 ## Projetos práticos (capstones) 🔜
 

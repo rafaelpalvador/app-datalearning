@@ -1,4 +1,4 @@
-# Ideias para aperfeiçoar o DataLingo
+# Ideias para aperfeiçoar o Datum
 
 Organizadas por impacto. ⭐ = recomendo priorizar. ✅ = já implementado (v1.1).
 
@@ -14,8 +14,14 @@ Organizadas por impacto. ⭐ = recomendo priorizar. ✅ = já implementado (v1.1
 - **Lembrete diário** (notificação nativa no Android), vibração e sons
 - **Backup/sincronização** manual entre aparelhos
 
+## ✅ Implementado na v1.2
+- Novo nome (Datum), novo design e ícones; sem ofensivas, vidas ou gemas
+- Níveis de carreira por XP; estatísticas do aluno com gráficos
+- Trilha de Estatística e dados maiores (teste A/B, vendas diárias, avaliações)
+- 68 problemas de entrevista (SQL e Python, 4 níveis) com explicação do conceito
+- Central de dúvidas: busca na teoria + tutor de IA dentro dos exercícios
+
 ## Próximos passos sugeridos
-1. **Tutor com IA** (explicação personalizada e dicas progressivas)
 2. **Contas + backend** (sincronização automática, ligas semanais reais, amigos)
 3. **PostgreSQL e DuckDB** no app, além do SQLite
 4. **Projetos guiados** (capstones) e mais conteúdo do `CURRICULO.md`

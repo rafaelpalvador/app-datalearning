@@ -1,57 +1,83 @@
 // Progresso do aluno salvo no aparelho (localStorage).
 // Para sincronizar entre celular e PC sem servidor: Perfil → Backup (código de exportação).
+// A chave de armazenamento é mantida desde a 1ª versão para preservar o progresso nas atualizações.
 
 const KEY = 'datalingo:v1';
-export const MAX_HEARTS = 5;
-export const MAX_FREEZES = 2;
-export const FREEZE_PRICE = 50;
-const HEART_REGEN_MS = 30 * 60 * 1000; // 1 vida a cada 30 min
 const DAY = 86400000;
 
-// data local (não UTC), para a ofensiva virar à meia-noite do aluno
+// data local (não UTC), para o "dia" virar à meia-noite do aluno
 export const today = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-const daysBetween = (a, b) => Math.round((new Date(b + 'T12:00') - new Date(a + 'T12:00')) / DAY);
+
+// ───────────── níveis de carreira (por XP)
+export const LEVELS = [
+  { xp: 0, title: 'Estagiário de Dados' },
+  { xp: 150, title: 'Analista Júnior I' },
+  { xp: 400, title: 'Analista Júnior II' },
+  { xp: 800, title: 'Analista Pleno I' },
+  { xp: 1400, title: 'Analista Pleno II' },
+  { xp: 2200, title: 'Analista Sênior I' },
+  { xp: 3300, title: 'Analista Sênior II' },
+  { xp: 4800, title: 'Especialista em Dados' },
+  { xp: 6800, title: 'Head de Dados' },
+];
+
+export function levelInfo(xp) {
+  let i = 0;
+  while (i + 1 < LEVELS.length && xp >= LEVELS[i + 1].xp) i++;
+  const cur = LEVELS[i];
+  const next = LEVELS[i + 1];
+  return {
+    index: i + 1,
+    title: cur.title,
+    next: next?.title ?? null,
+    progress: next ? (xp - cur.xp) / (next.xp - cur.xp) : 1,
+    toNext: next ? next.xp - xp : 0,
+  };
+}
 
 function freshDaily() {
-  return { day: today(), xp: 0, lessons: 0, perfect: 0, sql: 0, python: 0, review: 0, combo: 0, maxCombo: 0, claimed: [] };
+  return { day: today(), xp: 0, lessons: 0, perfect: 0, sql: 0, python: 0, review: 0, theory: 0, combo: 0, maxCombo: 0, claimed: [] };
 }
 
 function defaults() {
   return {
     xp: 0,
-    gems: 20,
-    streak: 0,
-    bestStreak: 0,
-    freezes: 0,
-    lastActiveDay: null,
     dailyGoal: 30,
-    hearts: MAX_HEARTS,
-    heartsUpdatedAt: Date.now(),
     completed: {},     // lessonId -> { at, stars, bestMistakes }
     checkpoints: {},   // unitId -> { at, score }
     mistakes: [],      // [{ lessonId, stepIndex, at }]
     srs: {},           // 'lessonId#stepIndex' -> { ease, interval, due, reps, lapses }
-    interview: {},     // problemId -> { solvedAt, bestSecs }
+    interview: {},     // problemId -> { solvedAt, bestSecs, attempts }
     achievements: {},  // id -> timestamp
-    history: {},       // 'AAAA-MM-DD' -> xp do dia (heatmap)
+    history: {},       // 'AAAA-MM-DD' -> xp do dia
+    topics: {},        // courseId -> { correct, answered } (estatísticas por trilha)
     daily: freshDaily(),
     reminder: { enabled: false, hour: 19, minute: 0 },
-    totals: { correct: 0, answered: 0, perfectLessons: 0, maxCombo: 0 },
+    settings: { sound: true, haptics: true, theme: 'system' },
+    tutor: { apiKey: '' },
+    totals: { correct: 0, answered: 0, perfectLessons: 0, maxCombo: 0, theoryRead: 0, tutorQuestions: 0 },
   };
 }
 
 let state = null;
-const listeners = new Set();
-export const onChange = (fn) => listeners.add(fn);
 
 export function getState() {
   if (state) return state;
   try {
     const saved = JSON.parse(localStorage.getItem(KEY) || '{}');
     const d = defaults();
-    state = { ...d, ...saved, totals: { ...d.totals, ...(saved.totals || {}) }, daily: saved.daily || d.daily, reminder: { ...d.reminder, ...(saved.reminder || {}) } };
-    // migração da v1 (todayXp/todayDay)
-    if (saved.todayDay && !saved.daily) state.daily = { ...freshDaily(), day: saved.todayDay, xp: saved.todayXp || 0 };
+    state = {
+      ...d,
+      ...saved,
+      totals: { ...d.totals, ...(saved.totals || {}) },
+      daily: { ...freshDaily(), ...(saved.daily || {}) },
+      reminder: { ...d.reminder, ...(saved.reminder || {}) },
+      settings: { ...d.settings, ...(saved.settings || {}) },
+      tutor: { ...d.tutor, ...(saved.tutor || {}) },
+      topics: saved.topics || {},
+    };
+    // limpeza de campos de versões anteriores (ofensiva, vidas, gemas)
+    for (const k of ['streak', 'bestStreak', 'freezes', 'lastActiveDay', 'hearts', 'heartsUpdatedAt', 'gems', 'frozeNotice', 'todayXp', 'todayDay']) delete state[k];
   } catch {
     state = defaults();
   }
@@ -61,94 +87,25 @@ export function getState() {
 
 export function save() {
   try { localStorage.setItem(KEY, JSON.stringify(state)); } catch { /* armazenamento indisponível */ }
-  listeners.forEach((fn) => fn(state));
 }
 
-// Regenera vidas, vira o dia e aplica protetores de ofensiva.
+// Vira o dia das missões.
 export function refresh() {
-  const s = state;
-  if (s.hearts < MAX_HEARTS) {
-    const gained = Math.floor((Date.now() - s.heartsUpdatedAt) / HEART_REGEN_MS);
-    if (gained > 0) {
-      s.hearts = Math.min(MAX_HEARTS, s.hearts + gained);
-      s.heartsUpdatedAt += gained * HEART_REGEN_MS;
-    }
-  } else {
-    s.heartsUpdatedAt = Date.now();
-  }
-  if (s.daily.day !== today()) s.daily = freshDaily();
-  if (s.lastActiveDay && s.streak > 0) {
-    const missed = daysBetween(s.lastActiveDay, today()) - 1; // dias inteiros sem praticar
-    if (missed > 0) {
-      if (s.freezes >= missed) {
-        s.freezes -= missed;
-        // o protetor "preenche" os dias perdidos: a ofensiva continua viva
-        s.lastActiveDay = today(new Date(Date.now() - DAY));
-        s.frozeNotice = missed;
-      } else {
-        s.streak = 0;
-      }
-    }
-  }
-  try { localStorage.setItem(KEY, JSON.stringify(s)); } catch { /* */ }
-}
-
-export function minutesToNextHeart() {
-  const s = getState();
-  if (s.hearts >= MAX_HEARTS) return 0;
-  return Math.max(1, Math.ceil((HEART_REGEN_MS - (Date.now() - s.heartsUpdatedAt)) / 60000));
-}
-
-export function loseHeart() {
-  const s = getState();
-  if (s.hearts === MAX_HEARTS) s.heartsUpdatedAt = Date.now();
-  s.hearts = Math.max(0, s.hearts - 1);
+  if (state.daily.day !== today()) state.daily = freshDaily();
   save();
-  return s.hearts;
-}
-
-export function gainHeart(n = 1) {
-  const s = getState();
-  s.hearts = Math.min(MAX_HEARTS, s.hearts + n);
-  save();
-}
-
-export function refillHearts() {
-  const s = getState();
-  if (s.gems < 30 || s.hearts >= MAX_HEARTS) return false;
-  s.gems -= 30;
-  s.hearts = MAX_HEARTS;
-  save();
-  return true;
 }
 
 export function addXp(amount) {
   const s = getState();
+  const before = levelInfo(s.xp).index;
   s.xp += amount;
   s.daily.xp += amount;
   s.history[today()] = (s.history[today()] || 0) + amount;
-  if (s.lastActiveDay !== today()) {
-    const diff = s.lastActiveDay ? daysBetween(s.lastActiveDay, today()) : null;
-    s.streak = diff === 1 ? s.streak + 1 : 1;
-    s.bestStreak = Math.max(s.bestStreak, s.streak);
-    s.lastActiveDay = today();
-  }
   save();
+  return levelInfo(s.xp).index > before; // subiu de nível?
 }
 
-export function addGems(n) {
-  getState().gems += n;
-  save();
-}
-
-export function buyFreeze() {
-  const s = getState();
-  if (s.gems < FREEZE_PRICE || s.freezes >= MAX_FREEZES) return false;
-  s.gems -= FREEZE_PRICE;
-  s.freezes += 1;
-  save();
-  return true;
-}
+export const daysStudied = () => Object.keys(getState().history).length;
 
 export function completeLesson(lessonId, mistakes, { silent = false } = {}) {
   const s = getState();
@@ -172,10 +129,22 @@ export function passCheckpoint(unitId, score) {
   save();
 }
 
-// Registra cada resposta: alimenta missões, combo e a revisão espaçada.
-export function recordAnswer({ lessonId, stepIndex, type, correct, review = false }) {
+export function recordTheory() {
+  const s = getState();
+  s.daily.theory += 1;
+  s.totals.theoryRead += 1;
+  save();
+}
+
+// Registra cada resposta: alimenta missões, estatísticas por trilha e a revisão espaçada.
+export function recordAnswer({ lessonId, stepIndex, type, correct, review = false, courseId = null }) {
   const s = getState();
   s.totals.answered += 1;
+  if (courseId) {
+    const t = (s.topics[courseId] ??= { correct: 0, answered: 0 });
+    t.answered += 1;
+    if (correct) t.correct += 1;
+  }
   if (correct) {
     s.totals.correct += 1;
     s.daily.combo += 1;
@@ -193,8 +162,7 @@ export function recordAnswer({ lessonId, stepIndex, type, correct, review = fals
 
 // ───────────── revisão espaçada (SM-2 simplificado)
 function srsUpdate(key, correct) {
-  const s = state;
-  const c = s.srs[key] || { ease: 2.5, interval: 0, due: 0, reps: 0, lapses: 0 };
+  const c = state.srs[key] || { ease: 2.5, interval: 0, due: 0, reps: 0, lapses: 0 };
   if (correct) {
     c.reps += 1;
     c.interval = c.reps === 1 ? 1 : c.reps === 2 ? 3 : Math.round(c.interval * c.ease);
@@ -206,12 +174,11 @@ function srsUpdate(key, correct) {
     c.ease = Math.max(1.3, c.ease - 0.2);
   }
   c.due = Date.now() + c.interval * DAY;
-  s.srs[key] = c;
+  state.srs[key] = c;
 }
 
 export function dueCards(now = Date.now()) {
-  const s = getState();
-  return Object.entries(s.srs)
+  return Object.entries(getState().srs)
     .filter(([, c]) => c.due <= now)
     .sort((a, b) => a[1].due - b[1].due)
     .map(([key, c]) => {
@@ -221,12 +188,10 @@ export function dueCards(now = Date.now()) {
 }
 
 export function srsStrength(lessonIds) {
-  // força média (0–1) dos cards de um conjunto de lições, para o radar de habilidades
-  const s = getState();
-  const cards = Object.entries(s.srs).filter(([k]) => lessonIds.includes(k.slice(0, k.lastIndexOf('#')))).map(([, c]) => c);
+  // domínio médio (0–1) dos exercícios de um conjunto de lições
+  const cards = Object.entries(getState().srs).filter(([k]) => lessonIds.includes(k.slice(0, k.lastIndexOf('#')))).map(([, c]) => c);
   if (!cards.length) return 0;
-  const score = cards.reduce((a, c) => a + Math.min(1, (c.reps + 1) / 4) * (c.due > Date.now() ? 1 : 0.6), 0);
-  return score / cards.length;
+  return cards.reduce((a, c) => a + Math.min(1, (c.reps + 1) / 4) * (c.due > Date.now() ? 1 : 0.6), 0) / cards.length;
 }
 
 // ───────────── erros
@@ -254,11 +219,10 @@ export function solveInterview(id, secs) {
 }
 
 // ───────────── missões e conquistas
-export function claimMission(id, gems) {
+export function claimMission(id) {
   const s = getState();
   if (s.daily.claimed.includes(id)) return false;
   s.daily.claimed.push(id);
-  s.gems += gems;
   save();
   return true;
 }
@@ -283,19 +247,27 @@ export function setReminder(r) {
   save();
 }
 
-export function consumeFrozeNotice() {
-  const s = getState();
-  const n = s.frozeNotice;
-  delete s.frozeNotice;
-  if (n) save();
-  return n;
+export function setSetting(key, value) {
+  getState().settings[key] = value;
+  save();
+}
+
+export function setTutorKey(apiKey) {
+  getState().tutor.apiKey = apiKey.trim();
+  save();
+}
+
+export function countTutorQuestion() {
+  getState().totals.tutorQuestions += 1;
+  save();
 }
 
 // Progresso de exemplo para a versão de demonstração (window.DATALINGO_DEMO).
-export function seedDemo([sqlIds, pyIds], interviewIds) {
+export function seedDemo(courseLessonIds, interviewIds) {
   const s = defaults();
   const now = Date.now();
-  const done = [...sqlIds.slice(0, 11), ...pyIds.slice(0, 5)];
+  const [sqlIds, pyIds, statIds] = courseLessonIds;
+  const done = [...sqlIds.slice(0, 11), ...pyIds.slice(0, 6), ...statIds.slice(0, 3)];
   done.forEach((id, i) => {
     s.completed[id] = { at: now - (done.length - i) * DAY * 2, stars: [3, 2, 3, 3, 1, 3, 2, 3][i % 8], bestMistakes: i % 3 };
     for (let k = 1; k < 6; k++) {
@@ -305,27 +277,27 @@ export function seedDemo([sqlIds, pyIds], interviewIds) {
   for (let d = 0; d < 70; d++) {
     if (d < 6 || (d * 7) % 5 > 1) s.history[today(new Date(now - d * DAY))] = d === 0 ? 25 : 15 + ((d * 37) % 90);
   }
-  Object.assign(s, {
-    xp: Object.values(s.history).reduce((a, b) => a + b, 0), gems: 85, streak: 6, bestStreak: 12, freezes: 1,
-    hearts: 4, lastActiveDay: today(), demoSeeded: true,
-  });
-  s.daily = { ...freshDaily(), xp: 25, lessons: 1, sql: 4, python: 2, review: 3, combo: 4, maxCombo: 6 };
-  s.totals = { correct: 214, answered: 251, perfectLessons: 5, maxCombo: 17 };
+  s.xp = Object.values(s.history).reduce((a, b) => a + b, 0);
+  s.daily = { ...freshDaily(), xp: 25, lessons: 1, sql: 4, python: 2, review: 3, theory: 3, combo: 4, maxCombo: 6 };
+  s.totals = { correct: 214, answered: 251, perfectLessons: 5, maxCombo: 17, theoryRead: 48, tutorQuestions: 0 };
+  s.topics = { sql: { correct: 121, answered: 138 }, python: { correct: 71, answered: 86 }, stats: { correct: 22, answered: 27 } };
   s.mistakes = [{ lessonId: sqlIds[4], stepIndex: 2, at: now }, { lessonId: sqlIds[9], stepIndex: 3, at: now }, { lessonId: pyIds[3], stepIndex: 1, at: now }];
-  s.interview = { [interviewIds[0]]: { solvedAt: now - DAY, bestSecs: 142 }, [interviewIds[2]]: { solvedAt: now, bestSecs: 61 } };
+  s.interview = { [interviewIds[0]]: { solvedAt: now - DAY, bestSecs: 142 }, [interviewIds[2]]: { solvedAt: now, bestSecs: 61 }, [interviewIds[4]]: { solvedAt: now, bestSecs: 205 } };
+  s.demoSeeded = true;
   state = s;
   save();
 }
 
 export function resetProgress() {
-  state = { ...defaults(), demoSeeded: !!state?.demoSeeded };
+  const keep = { demoSeeded: !!state?.demoSeeded, settings: state?.settings, tutor: state?.tutor };
+  state = { ...defaults(), ...Object.fromEntries(Object.entries(keep).filter(([, v]) => v !== undefined)) };
   save();
 }
 
 // ───────────── backup / sincronização manual entre aparelhos
 export function exportCode() {
-  const json = JSON.stringify(getState());
-  return 'DL1:' + btoa(unescape(encodeURIComponent(json)));
+  const { tutor, ...rest } = getState(); // a chave da API nunca sai do aparelho
+  return 'DL1:' + btoa(unescape(encodeURIComponent(JSON.stringify(rest))));
 }
 
 export function importCode(code) {
@@ -333,6 +305,7 @@ export function importCode(code) {
   if (!raw.startsWith('DL1:')) throw new Error('Código inválido: ele deve começar com DL1:');
   const data = JSON.parse(decodeURIComponent(escape(atob(raw.slice(4)))));
   if (typeof data !== 'object' || data === null || typeof data.xp !== 'number') throw new Error('Código inválido.');
+  data.tutor = getState().tutor;
   localStorage.setItem(KEY, JSON.stringify(data));
   state = null;
   return getState();

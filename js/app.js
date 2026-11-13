@@ -1,5 +1,5 @@
 import { COURSES, findLesson, allLessons } from './content/index.js';
-import { INTERVIEW } from './content/interview.js';
+import { INTERVIEW, INTERVIEW_SQL, INTERVIEW_PY, LEVELS } from './content/interview.js';
 import { SCHEMA_DOC } from './content/datasets.js';
 import { withVariant } from './content/helpers.js';
 import * as store from './state.js';
@@ -7,11 +7,15 @@ import { renderMarkdown, inline, esc, highlight } from './markdown.js';
 import { freshDb, runQuery, evaluateSql, initSql, createDb, friendlySqlError } from './engines/sql-engine.js';
 import { runPython, friendlyPyError } from './engines/python-engine.js';
 import { dailyMissions, settleMissions, checkAchievements, ACHIEVEMENTS, MISSION_REWARD } from './gamification.js';
+import { askTutor, tutorMode, contextFromStep, isDemoRuntime } from './tutor.js';
+import { icon } from './icons.js';
 import * as platform from './platform.js';
 
+export const APP_NAME = 'Datum';
 const app = document.getElementById('app');
 const EXERCISE_TYPES = new Set(['quiz', 'order', 'fill', 'sql', 'python']);
 const CHECKPOINT_PASS = 0.8;
+const IS_DEMO = !!window.DATALINGO_DEMO;
 
 // ─────────────────────────────────────────── utilidades de DOM
 function h(tag, attrs = {}, ...children) {
@@ -20,6 +24,12 @@ function h(tag, attrs = {}, ...children) {
     if (v === null || v === undefined || v === false) continue;
     if (k === 'class') el.className = v;
     else if (k === 'html') el.innerHTML = v;
+    else if (k === 'style' && typeof v === 'object') {
+      for (const [prop, val] of Object.entries(v)) {
+        if (prop.startsWith('--')) el.style.setProperty(prop, val);
+        else el.style[prop] = val;
+      }
+    }
     else if (k.startsWith('on')) el.addEventListener(k.slice(2).toLowerCase(), v);
     else el.setAttribute(k, v === true ? '' : v);
   }
@@ -29,10 +39,12 @@ function h(tag, attrs = {}, ...children) {
   }
   return el;
 }
-
-// replaceChildren que ignora null/false (evita o texto "null" na tela)
 const put = (el, ...children) => el.replaceChildren(...children.flat().filter((c) => c !== null && c !== undefined && c !== false));
-
+const ic = (name, size = 20, cls = '') => {
+  const t = document.createElement('template');
+  t.innerHTML = icon(name, size, cls);
+  return t.content.firstChild;
+};
 const shuffle = (arr) => {
   const a = [...arr];
   for (let i = a.length - 1; i > 0; i--) {
@@ -43,34 +55,41 @@ const shuffle = (arr) => {
 };
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 const fmtTime = (secs) => `${Math.floor(secs / 60)}:${String(secs % 60).padStart(2, '0')}`;
+const pct = (a, b) => (b ? Math.round((100 * a) / b) : 0);
+const trackVar = (courseId) => `var(--c-${courseId})`;
+const norm = (s) => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
 
-const settings = () => {
-  const s = store.getState();
-  s.settings ??= { sound: true, haptics: true };
-  return s.settings;
-};
-
-function feedbackFx(kind) {
-  if (settings().haptics) platform.haptic(kind === 'error' ? 'error' : 'success');
-  platform.sound(kind, settings().sound);
+// ─────────────────────────────────────────── tema, feedback, toasts, diálogos
+function applyTheme() {
+  const t = store.getState().settings.theme;
+  if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
+  else if (!IS_DEMO) delete document.documentElement.dataset.theme;
+  const dark = t === 'dark' || (t !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  platform.styleStatusBar(dark);
 }
 
-// ─────────────────────────────────────────── toasts
+function feedbackFx(kind) {
+  const s = store.getState().settings;
+  if (s.haptics) platform.haptic(kind === 'error' ? 'error' : 'success');
+  platform.sound(kind, s.sound);
+}
+
 const toastBox = h('div', { class: 'toasts', 'aria-live': 'polite' });
 document.body.append(toastBox);
-function toast(html, kind = '') {
-  const t = h('div', { class: `toast ${kind}`, html });
+function toast(text, kind = '', iconName = 'check') {
+  const t = h('div', { class: `toast ${kind}` }, ic(kind === 'bad' ? 'alert' : iconName, 18), h('span', {}, text));
   toastBox.append(t);
   setTimeout(() => t.classList.add('out'), 3600);
   setTimeout(() => t.remove(), 4100);
 }
 
-// ─────────────────────────────────────────── confirmação (substitui o confirm() nativo,
-// que é bloqueado em alguns ambientes e destoa do visual no celular)
+let keyHandler = null;
+let overlayClose = null; // fecha o diálogo/gaveta aberto (Esc e botão voltar do Android)
+
 function askConfirm(message, { ok = 'Confirmar', danger = false } = {}) {
   return new Promise((resolve) => {
     const prevKey = keyHandler;
-    const close = (v) => { ov.remove(); keyHandler = prevKey; resolve(v); };
+    const close = (v) => { ov.remove(); keyHandler = prevKey; overlayClose = null; resolve(v); };
     const okBtn = h('button', { class: `btn ${danger ? 'danger-solid' : 'primary'}`, onclick: () => close(true) }, ok);
     const ov = h('div', { class: 'modal-backdrop', onclick: (e) => { if (e.target === ov) close(false); } },
       h('div', { class: 'modal', role: 'dialog', 'aria-modal': 'true', 'aria-label': message },
@@ -78,12 +97,28 @@ function askConfirm(message, { ok = 'Confirmar', danger = false } = {}) {
         h('div', { class: 'modal-actions' }, h('button', { class: 'btn ghost', onclick: () => close(false) }, 'Cancelar'), okBtn),
       ));
     keyHandler = (e) => { if (e.key === 'Escape') close(false); if (e.key === 'Enter') { e.preventDefault(); close(true); } };
+    overlayClose = () => close(false);
     document.body.append(ov);
     okBtn.focus();
   });
 }
 
-// ─────────────────────────────────────────── progresso
+function showModal(title, body, actions = []) {
+  const prevKey = keyHandler;
+  const close = () => { ov.remove(); keyHandler = prevKey; overlayClose = null; };
+  const ov = h('div', { class: 'modal-backdrop', onclick: (e) => { if (e.target === ov) close(); } },
+    h('div', { class: 'modal wide', role: 'dialog', 'aria-modal': 'true', 'aria-label': title },
+      h('div', { class: 'spread' }, h('h2', {}, title), h('button', { class: 'icon-btn', 'aria-label': 'Fechar', onclick: close }, ic('x'))),
+      body,
+      actions.length ? h('div', { class: 'modal-actions' }, actions.map((a) => h('button', { class: `btn ${a.primary ? 'primary' : ''}`, onclick: () => { close(); a.onclick(); } }, a.label))) : null,
+    ));
+  keyHandler = (e) => { if (e.key === 'Escape') close(); };
+  overlayClose = close;
+  document.body.append(ov);
+  return close;
+}
+
+// ─────────────────────────────────────────── progresso e contagens
 function lessonUnlocked(course, lessonId) {
   const s = store.getState();
   const list = allLessons(course);
@@ -95,7 +130,19 @@ function courseProgress(course) {
   const s = store.getState();
   const list = allLessons(course);
   const done = list.filter((l) => s.completed[l.id]).length;
-  return { done, total: list.length, pct: Math.round((100 * done) / list.length) };
+  return { done, total: list.length, pct: pct(done, list.length) };
+}
+
+const lessonCounts = (lesson) => ({
+  theory: lesson.steps.filter((s) => s.type === 'theory').length,
+  practice: lesson.steps.filter((s) => EXERCISE_TYPES.has(s.type)).length,
+});
+
+function courseCounts(course) {
+  return allLessons(course).reduce((a, l) => {
+    const c = lessonCounts(l);
+    return { theory: a.theory + c.theory, practice: a.practice + c.practice, lessons: a.lessons + 1 };
+  }, { theory: 0, practice: 0, lessons: 0 });
 }
 
 function findUnit(unitId) {
@@ -107,39 +154,73 @@ function findUnit(unitId) {
 }
 
 function itemFromRef(lessonId, stepIndex) {
-  const step = findLesson(lessonId)?.lesson.steps[stepIndex];
-  return step ? { step, lessonId, stepIndex } : null;
+  const f = findLesson(lessonId);
+  const step = f?.lesson.steps[stepIndex];
+  return step ? { step, lessonId, stepIndex, courseId: f.course.id } : null;
+}
+
+// Próxima lição: segue a trilha estudada mais recentemente.
+function nextLesson() {
+  const s = store.getState();
+  const recent = Object.entries(s.completed).sort((a, b) => b[1].at - a[1].at)[0];
+  const order = recent ? [findLesson(recent[0]).course, ...COURSES] : COURSES;
+  for (const course of order) {
+    const lesson = allLessons(course).find((l) => !s.completed[l.id]);
+    if (lesson) {
+      const unit = course.units.find((u) => u.id === lesson.unitId);
+      return { course, unit, lesson };
+    }
+  }
+  return null;
 }
 
 // ─────────────────────────────────────────── layout
 const NAV = [
-  { id: 'home', href: '#/', icon: '🏠', label: 'Início' },
-  { id: 'practice', href: '#/praticar', icon: '🎯', label: 'Praticar' },
-  { id: 'interview', href: '#/entrevista', icon: '💼', label: 'Entrevista' },
-  { id: 'awards', href: '#/conquistas', icon: '🏆', label: 'Conquistas' },
-  { id: 'profile', href: '#/perfil', icon: '👤', label: 'Perfil' },
+  { id: 'home', href: '#/', icon: 'home', label: 'Início' },
+  { id: 'practice', href: '#/praticar', icon: 'target', label: 'Praticar' },
+  { id: 'interview', href: '#/entrevistas', icon: 'briefcase', label: 'Entrevistas' },
+  { id: 'doubts', href: '#/duvidas', icon: 'help', label: 'Dúvidas' },
+  { id: 'awards', href: '#/conquistas', icon: 'trophy', label: 'Conquistas', desktopOnly: true },
+  { id: 'profile', href: '#/perfil', icon: 'user', label: 'Perfil' },
 ];
 
-function topBar(active) {
-  store.refresh();
+function brand() {
+  return h('a', { class: 'brand', href: '#/', 'aria-label': `${APP_NAME}, início` },
+    h('span', { class: 'brand-mark' }, ic('chart', 18)), h('span', { class: 'brand-name' }, APP_NAME));
+}
+
+function levelMini() {
   const s = store.getState();
-  return h('header', { class: 'topbar' },
-    h('a', { class: 'brand', href: '#/' }, h('span', { class: 'brand-icon' }, '📊'), h('span', { class: 'brand-name' }, 'DataLingo')),
-    h('nav', { class: 'top-nav' }, NAV.map((n) => h('a', { href: n.href, class: n.id === active ? 'active' : '' }, n.label))),
-    h('div', { class: 'stats' },
-      h('span', { class: 'stat streak' + (s.lastActiveDay === s.daily.day ? ' on' : ''), title: `Ofensiva (dias seguidos)${s.freezes ? ` · ${s.freezes} protetor(es)` : ''}` }, '🔥', s.streak, s.freezes ? h('small', {}, '🧊') : null),
-      h('span', { class: 'stat gems', title: 'Gemas' }, '💎', s.gems),
-      h('span', { class: 'stat xp', title: 'XP total' }, '⚡', s.xp),
-      h('span', { class: 'stat hearts', title: s.hearts < store.MAX_HEARTS ? `Próxima vida em ${store.minutesToNextHeart()} min` : 'Vidas cheias' }, '❤️', s.hearts),
-    ),
+  const lv = store.levelInfo(s.xp);
+  return h('a', { class: 'side-level', href: '#/perfil' },
+    h('div', { class: 'spread' }, h('span', { class: 'eyebrow' }, `Nível ${lv.index}`), h('span', { class: 'small num', style: { color: 'var(--xp)' } }, `${s.xp} XP`)),
+    h('div', { class: 'lvl-title' }, lv.title),
+    h('div', { class: 'progress' }, h('div', { class: 'bar', style: { width: `${Math.round(lv.progress * 100)}%`, background: 'var(--xp)' } })),
+    h('div', { class: 'tiny faint' }, lv.next ? `${lv.toNext} XP para ${lv.next}` : 'Nível máximo alcançado'),
   );
 }
 
-function bottomNav(active) {
-  return h('nav', { class: 'bottom-nav' }, NAV.map((n) => h('a', { href: n.href, class: n.id === active ? 'active' : '' }, h('span', { class: 'bn-icon' }, n.icon), h('span', {}, n.label))));
+function sidebar(active) {
+  const due = store.dueCards().length;
+  return h('aside', { class: 'sidebar' },
+    brand(),
+    h('nav', { class: 'nav', 'aria-label': 'Navegação principal' }, NAV.map((n) => h('a', { href: n.href, class: n.id === active ? 'active' : '' },
+      ic(n.icon, 19), n.label, n.id === 'practice' && due ? h('span', { class: 'badge brand' }, due) : null))),
+    levelMini(),
+  );
 }
 
-const IS_DEMO = !!window.DATALINGO_DEMO;
+function topbar() {
+  const s = store.getState();
+  const lv = store.levelInfo(s.xp);
+  return h('header', { class: 'topbar' }, brand(),
+    h('a', { class: 'badge', href: '#/perfil', style: { gap: '6px' } }, h('span', { class: 'num' }, `Nv ${lv.index}`), h('span', { style: { color: 'var(--xp)' }, class: 'num' }, `${s.xp} XP`)));
+}
+
+function bottomNav(active) {
+  return h('nav', { class: 'bottom-nav', 'aria-label': 'Navegação' },
+    NAV.filter((n) => !n.desktopOnly).map((n) => h('a', { href: n.href, class: n.id === active ? 'active' : '' }, ic(n.icon, 21), h('span', {}, n.label))));
+}
 
 function demoBar() {
   if (!IS_DEMO) return null;
@@ -148,145 +229,167 @@ function demoBar() {
     h('button', {
       class: 'link-btn',
       onclick: async () => { if (await askConfirm('Começar do zero nesta demonstração?', { ok: 'Começar do zero' })) { store.resetProgress(); location.hash = '#/'; route(); } },
-    }, 'Começar do zero'),
-  );
+    }, 'Começar do zero'));
 }
 
 function page(active, ...children) {
-  app.replaceChildren(topBar(active), demoBar(), h('main', { class: 'container' }, ...children), bottomNav(active));
+  store.refresh();
+  app.replaceChildren(
+    h('div', { class: 'shell' },
+      sidebar(active),
+      h('div', { class: 'main-col' }, demoBar(), topbar(), h('main', { class: 'main' }, h('div', { class: 'container' }, ...children))),
+    ),
+    bottomNav(active),
+  );
   window.scrollTo(0, 0);
 }
 
-// ─────────────────────────────────────────── HOME
+const pageHead = (eyebrow, title, desc) => h('div', { class: 'page-head' }, eyebrow ? h('span', { class: 'eyebrow' }, eyebrow) : null, h('h1', {}, title), desc ? h('p', { class: 'muted' }, desc) : null);
+
+// ─────────────────────────────────────────── INÍCIO
 function missionsCard() {
-  const ms = dailyMissions();
-  return h('section', { class: 'card missions' },
-    h('div', { class: 'card-head' }, h('h3', {}, '📋 Missões do dia'), h('span', { class: 'muted small' }, `+${MISSION_REWARD} 💎 cada`)),
-    ms.map((m) => h('div', { class: `mission ${m.done ? 'done' : ''}` },
-      h('span', { class: 'm-icon' }, m.done ? '✅' : m.icon),
-      h('div', { class: 'm-body' },
-        h('div', {}, m.text),
-        h('div', { class: 'progress thin' }, h('div', { class: 'bar', style: `width:${Math.round((100 * m.value) / m.target)}%` })),
-      ),
-      h('span', { class: 'muted small' }, `${m.value}/${m.target}`),
+  return h('section', { class: 'card' },
+    h('div', { class: 'card-title' }, h('h3', {}, 'Missões de hoje'), h('span', { class: 'tiny faint' }, `+${MISSION_REWARD} XP cada`)),
+    dailyMissions().map((m) => h('div', { class: `mission ${m.done ? 'done' : ''}` },
+      h('span', { class: 'm-icon' }, ic(m.done ? 'check' : m.icon, 16)),
+      h('div', {}, h('div', { class: 'small', style: { fontWeight: 600 } }, m.text), h('div', { class: 'progress' }, h('div', { class: 'bar', style: { width: `${pct(m.value, m.target)}%`, background: m.done ? 'var(--good)' : 'var(--ink)' } }))),
+      h('span', { class: 'tiny faint num' }, `${m.value}/${m.target}`),
     )),
+  );
+}
+
+function trackCard(c) {
+  const p = courseProgress(c);
+  const n = courseCounts(c);
+  return h('a', { class: 'card track-card', href: `#/curso/${c.id}`, style: { '--track': trackVar(c.id) } },
+    h('div', { class: 'spread' }, h('span', { class: 'track-icon' }, ic(c.icon, 21)), h('span', { class: 'small faint num' }, `${p.pct}%`)),
+    h('div', { class: 'stack', style: { gap: '4px' } }, h('h3', {}, c.title), h('p', { class: 'small muted clamp-3' }, c.description)),
+    h('div', { class: 'progress' }, h('div', { class: 'bar', style: { width: `${p.pct}%` } })),
+    h('div', { class: 'track-meta' },
+      h('span', {}, ic('book', 14), `${n.lessons} lições`),
+      h('span', {}, ic('reader', 14), `${n.theory} teoria`),
+      h('span', {}, ic('code', 14), `${n.practice} prática`)),
   );
 }
 
 function viewHome() {
   const s = store.getState();
-  const goalPct = Math.min(100, Math.round((100 * s.daily.xp) / s.dailyGoal));
+  const goalPct = Math.min(100, pct(s.daily.xp, s.dailyGoal));
   const due = store.dueCards().length;
-  const froze = store.consumeFrozeNotice();
-  if (froze) setTimeout(() => toast(`🧊 Seu protetor salvou a ofensiva de ${s.streak} dias!`), 300);
+  const next = nextLesson();
+  const dateStr = new Date().toLocaleDateString('pt-BR', { weekday: 'long', day: 'numeric', month: 'long' });
 
   page('home',
-    h('section', { class: 'hero' },
-      h('div', {},
-        h('h1', {}, s.xp === 0 ? 'Aprenda dados todos os dias' : `Bora, ${s.streak > 1 ? `${s.streak} dias seguidos! 🔥` : 'vamos praticar!'}`),
-        h('p', { class: 'muted' }, 'Lições curtas de SQL e Python com exercícios que rodam de verdade.'),
-      ),
-      h('div', { class: 'goal-card' },
-        h('div', { class: 'ring', style: `--p:${goalPct}` }, h('span', {}, `${goalPct}%`)),
-        h('div', {},
-          h('strong', {}, 'Meta diária'),
-          h('div', { class: 'muted' }, `${s.daily.xp} / ${s.dailyGoal} XP`),
-          goalPct >= 100 ? h('div', { class: 'ok-text' }, 'Meta batida! 🎉') : null,
-        ),
-      ),
+    h('div', { class: 'hello' },
+      h('div', { class: 'page-head' }, h('span', { class: 'eyebrow' }, dateStr), h('h1', {}, s.xp === 0 ? 'Bem-vindo ao Datum' : 'Bom te ver de volta'),
+        h('p', { class: 'muted' }, 'SQL, Python e estatística para dados: teoria curta, muita prática e correção na hora.')),
+      h('div', { class: 'goal card flat', style: { padding: '12px 16px' } },
+        h('div', { class: 'ring', style: { '--p': goalPct } }, h('span', {}, `${goalPct}%`)),
+        h('div', {}, h('div', { class: 'small', style: { fontWeight: 600 } }, 'Meta do dia'), h('div', { class: 'small muted num' }, `${s.daily.xp} de ${s.dailyGoal} XP`))),
     ),
-    due ? h('button', { class: 'banner-btn', onclick: () => startPractice('srs') }, h('span', { class: 'big' }, '🧠'),
-      h('div', {}, h('strong', {}, `${due} exercício${due > 1 ? 's' : ''} para revisar hoje`), h('div', { class: 'small' }, 'A revisão espaçada traz de volta o que você está prestes a esquecer.')),
-      h('span', { class: 'chev' }, '›')) : null,
     h('div', { class: 'home-grid' },
-      h('div', {},
-        h('h2', { class: 'section-title' }, 'Trilhas'),
-        h('div', { class: 'course-grid' },
-          COURSES.map((c) => {
-            const p = courseProgress(c);
-            return h('a', { class: 'course-card', href: `#/curso/${c.id}`, style: `--accent:${c.color}` },
-              h('div', { class: 'course-icon' }, c.icon),
-              h('h3', {}, c.title),
-              h('p', { class: 'muted small' }, c.description),
-              h('div', { class: 'progress' }, h('div', { class: 'bar', style: `width:${p.pct}%` })),
-              h('div', { class: 'muted small' }, `${p.done} de ${p.total} lições · ${c.units.length} unidades`),
-            );
-          }),
-        ),
+      h('div', { class: 'stack', style: { gap: '20px' } },
+        next ? h('section', { class: 'card continue', style: { '--track': trackVar(next.course.id) } },
+          h('div', { class: 'stack', style: { gap: '6px' } },
+            h('span', { class: 'track-chip' }, h('span', { class: 'dot' }), `${next.course.title} · ${next.unit.title}`),
+            h('h2', {}, next.lesson.title),
+            h('span', { class: 'small faint' }, (() => { const c = lessonCounts(next.lesson); return `${c.theory} cards de teoria · ${c.practice} exercícios`; })())),
+          h('a', { class: 'btn primary', href: `#/licao/${next.lesson.id}` }, s.xp ? 'Continuar' : 'Começar', ic('chevronRight', 18)))
+          : h('section', { class: 'card' }, h('h2', {}, 'Você concluiu todas as trilhas'), h('p', { class: 'muted' }, 'Use a revisão espaçada e as entrevistas para manter tudo afiado.')),
+        due ? h('a', { class: 'card review-banner', href: '#/praticar' },
+          h('span', { class: 'ri' }, ic('brain', 22)),
+          h('div', {}, h('div', { style: { fontWeight: 600 } }, `${due} exercício${due > 1 ? 's' : ''} para revisar hoje`), h('div', { class: 'small muted' }, 'A revisão espaçada traz de volta o que você está prestes a esquecer.')),
+          ic('chevronRight', 20)) : null,
+        h('div', { class: 'section' },
+          h('div', { class: 'section-title' }, h('h2', {}, 'Trilhas')),
+          h('div', { class: 'grid-3' }, COURSES.map(trackCard))),
       ),
-      h('div', {}, h('h2', { class: 'section-title' }, 'Hoje'), missionsCard()),
+      h('div', { class: 'stack', style: { gap: '20px' } },
+        missionsCard(),
+        h('a', { class: 'card review-banner', href: '#/entrevistas' },
+          h('span', { class: 'ri', style: { background: 'var(--surface-2)', color: 'var(--ink)' } }, ic('briefcase', 22)),
+          h('div', {}, h('div', { style: { fontWeight: 600 } }, 'Treino para entrevistas'), h('div', { class: 'small muted' }, `${INTERVIEW_SQL.length} de SQL e ${INTERVIEW_PY.length} de Python, de Júnior a Especialista.`)),
+          ic('chevronRight', 20)),
+        h('a', { class: 'card review-banner', href: '#/duvidas' },
+          h('span', { class: 'ri', style: { background: 'var(--surface-2)', color: 'var(--ink)' } }, ic('help', 22)),
+          h('div', {}, h('div', { style: { fontWeight: 600 } }, 'Tirar dúvidas'), h('div', { class: 'small muted' }, 'Busque em toda a teoria ou pergunte ao tutor.')),
+          ic('chevronRight', 20)),
+      ),
     ),
   );
 }
 
-// ─────────────────────────────────────────── TRILHA DO CURSO
+// ─────────────────────────────────────────── TRILHA (programa)
 function viewCourse(courseId) {
   const course = COURSES.find((c) => c.id === courseId);
   if (!course) return viewHome();
   const s = store.getState();
   const list = allLessons(course);
   const currentId = list.find((l) => !s.completed[l.id])?.id;
-  let n = 0;
+  const p = courseProgress(course);
+  const n = courseCounts(course);
 
   page('home',
-    h('a', { class: 'back', href: '#/' }, '← Trilhas'),
-    h('h1', {}, course.icon, ' ', course.title),
-    h('div', { class: 'path', style: `--accent:${course.color}` },
-      course.units.map((unit, ui) => {
-        const unitDone = unit.lessons.every((l) => s.completed[l.id]);
-        const unitOpen = lessonUnlocked(course, unit.lessons[0].id);
-        const cp = s.checkpoints[unit.id];
-        return h('section', { class: 'unit' },
-          h('div', { class: 'unit-banner' },
-            h('div', {}, h('div', { class: 'unit-label' }, `Unidade ${ui + 1}`), h('h2', {}, unit.title), h('p', {}, unit.description)),
-          ),
-          h('div', { class: 'nodes' },
-            unit.lessons.map((lesson) => {
-              const done = s.completed[lesson.id];
-              const unlocked = lessonUnlocked(course, lesson.id);
-              const isCurrent = lesson.id === currentId;
-              const offset = Math.round(Math.sin(n++ * 0.9) * 70);
-              const exercises = lesson.steps.filter((st) => EXERCISE_TYPES.has(st.type)).length;
-              return h('div', { class: 'node-wrap', style: `--x:${offset}px` },
-                isCurrent ? h('div', { class: 'start-bubble' }, 'COMEÇAR') : null,
-                h('button', {
-                  class: `node ${done ? 'done' : ''} ${isCurrent ? 'current' : ''} ${unlocked ? '' : 'locked'}`,
-                  disabled: !unlocked,
-                  'aria-label': lesson.title,
-                  onclick: () => { location.hash = `#/licao/${lesson.id}`; },
-                }, done ? '★' : unlocked ? '▶' : '🔒'),
-                h('div', { class: 'node-label' }, lesson.title,
-                  h('span', { class: 'muted small' }, done ? ` · ${'★'.repeat(done.stars)}${'☆'.repeat(3 - done.stars)}` : ` · ${exercises} exercícios`)),
-              );
-            }),
-            h('div', { class: 'node-wrap' },
-              h('button', {
-                class: `node checkpoint ${cp ? 'done' : ''} ${unitOpen ? '' : 'locked'}`,
-                disabled: !unitOpen,
-                'aria-label': 'Checkpoint da unidade',
-                onclick: () => startCheckpoint(unit.id),
-              }, '🏁'),
-              h('div', { class: 'node-label' }, 'Checkpoint',
-                h('span', { class: 'muted small' }, cp ? ` · ${Math.round(cp.score * 100)}%` : unitDone ? ' · teste a unidade toda' : ' · acerte 80% e pule a unidade')),
-            ),
-          ),
-        );
-      }),
+    h('a', { class: 'btn ghost sm', href: '#/', style: { alignSelf: 'flex-start' } }, ic('arrowLeft', 16), 'Início'),
+    h('section', { class: 'course-head', style: { '--track': trackVar(course.id) } },
+      h('span', { class: 'track-icon' }, ic(course.icon, 26)),
+      h('div', { class: 'stack', style: { gap: '8px' } },
+        h('h1', {}, course.title),
+        h('p', { class: 'muted' }, course.description),
+        h('div', { class: 'stat-row' },
+          h('div', {}, h('strong', {}, `${p.done}/${p.total}`), h('span', {}, 'lições')),
+          h('div', {}, h('strong', {}, n.theory), h('span', {}, 'cards de teoria')),
+          h('div', {}, h('strong', {}, n.practice), h('span', {}, 'exercícios práticos')),
+          h('div', {}, h('strong', {}, `${p.pct}%`), h('span', {}, 'concluído'))),
+        h('div', { class: 'progress lg' }, h('div', { class: 'bar', style: { width: `${p.pct}%` } })),
+      ),
     ),
+    course.units.map((unit, ui) => {
+      const unitDone = unit.lessons.every((l) => s.completed[l.id]);
+      const unitOpen = lessonUnlocked(course, unit.lessons[0].id);
+      const cp = s.checkpoints[unit.id];
+      const doneCount = unit.lessons.filter((l) => s.completed[l.id]).length;
+      return h('section', { class: 'card unit', style: { '--track': trackVar(course.id) } },
+        h('div', { class: 'unit-head' },
+          h('span', { class: 'unit-num' }, String(ui + 1).padStart(2, '0')),
+          h('div', {}, h('h3', {}, unit.title), h('p', { class: 'small muted' }, unit.description)),
+          h('span', { class: 'small faint num' }, `${doneCount}/${unit.lessons.length}`)),
+        unit.lessons.map((lesson) => {
+          const done = s.completed[lesson.id];
+          const unlocked = lessonUnlocked(course, lesson.id);
+          const isCurrent = lesson.id === currentId;
+          const c = lessonCounts(lesson);
+          return h('button', {
+            class: `lesson-row ${done ? 'done' : ''} ${isCurrent ? 'current' : ''}`,
+            disabled: !unlocked,
+            onclick: () => { location.hash = `#/licao/${lesson.id}`; },
+          },
+          h('span', { class: 'l-status' }, ic(done ? 'check' : unlocked ? 'play' : 'lock', 14)),
+          h('div', {}, h('div', { class: 'l-title' }, lesson.title),
+            h('div', { class: 'l-meta' }, h('span', {}, `${c.theory} teoria`), h('span', {}, `${c.practice} prática`), isCurrent ? h('span', { class: 'badge brand' }, 'próxima') : null)),
+          done ? h('span', { class: 'stars', 'aria-label': `${done.stars} de 3 estrelas` }, [1, 2, 3].map((i) => h('span', { class: i <= done.stars ? '' : 'off' }, ic('star', 14)))) : h('span', {}),
+          h('span', { class: 'chev' }, ic('chevronRight', 18)));
+        }),
+        h('button', { class: 'lesson-row checkpoint-row', disabled: !unitOpen, onclick: () => startCheckpoint(unit.id) },
+          h('span', { class: 'l-status' }, ic(cp ? 'check' : 'flag', 14)),
+          h('div', {}, h('div', { class: 'l-title' }, 'Checkpoint da unidade'),
+            h('div', { class: 'l-meta' }, h('span', {}, cp ? `aprovado com ${Math.round(cp.score * 100)}%` : unitDone ? 'teste a unidade inteira' : 'acerte 80% e pule a unidade'))),
+          h('span', {}), h('span', { class: 'chev' }, ic('chevronRight', 18))),
+      );
+    }),
   );
 }
 
 // ─────────────────────────────────────────── EDITOR E TABELAS
 function codeEditor(value, lang, onRun) {
-  const ta = h('textarea', { class: 'editor', spellcheck: 'false', autocapitalize: 'off', autocomplete: 'off', autocorrect: 'off', 'aria-label': `Editor ${lang}` });
+  const ta = h('textarea', { class: 'editor', spellcheck: 'false', autocapitalize: 'off', autocomplete: 'off', autocorrect: 'off', 'aria-label': `Editor de ${lang === 'sql' ? 'SQL' : 'Python'}` });
   ta.value = value;
-  const resize = () => { ta.style.height = 'auto'; ta.style.height = Math.max(120, ta.scrollHeight + 4) + 'px'; };
+  const resize = () => { ta.style.height = 'auto'; ta.style.height = Math.max(130, ta.scrollHeight + 4) + 'px'; };
   ta.addEventListener('input', resize);
   ta.addEventListener('keydown', (e) => {
     if (e.key === 'Tab') {
       e.preventDefault();
-      const indent = lang === 'python' ? '    ' : '  ';
-      ta.setRangeText(indent, ta.selectionStart, ta.selectionEnd, 'end');
+      ta.setRangeText(lang === 'python' ? '    ' : '  ', ta.selectionStart, ta.selectionEnd, 'end');
       resize();
     } else if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
       e.preventDefault();
@@ -294,9 +397,8 @@ function codeEditor(value, lang, onRun) {
     }
   });
   requestAnimationFrame(resize);
-  // barra de símbolos para o teclado do celular
-  const symbols = lang === 'sql' ? ['*', ',', "'", '(', ')', '=', '<', '>', ';', '%', '_'] : ['(', ')', '[', ']', '"', ':', '=', '.', '_', '{', '}', '#', '    '];
-  const kb = h('div', { class: 'symbol-bar' }, symbols.map((sym) => h('button', {
+  const symbols = lang === 'sql' ? ['*', ',', "'", '(', ')', '=', '<', '>', ';', '%', '_', '.'] : ['(', ')', '[', ']', '"', ':', '=', '.', '_', '{', '}', '#', '    '];
+  const kb = h('div', { class: 'symbol-bar', 'aria-label': 'Símbolos' }, symbols.map((sym) => h('button', {
     type: 'button',
     onmousedown: (e) => e.preventDefault(),
     onclick: () => { ta.focus(); ta.setRangeText(sym, ta.selectionStart, ta.selectionEnd, 'end'); ta.dispatchEvent(new Event('input')); },
@@ -307,21 +409,23 @@ function codeEditor(value, lang, onRun) {
 }
 
 function resultTable(res) {
-  if (!res.columns.length) return h('div', { class: 'muted small' }, 'Comando executado (sem linhas retornadas).');
+  if (!res.columns.length) return h('div', { class: 'small faint' }, 'Comando executado (sem linhas retornadas).');
   const max = 50;
-  return h('div', { class: 'table-wrap' },
-    h('table', { class: 'result' },
+  return h('div', {},
+    h('div', { class: 'table-wrap' }, h('table', { class: 'result' },
       h('thead', {}, h('tr', {}, res.columns.map((c) => h('th', {}, c)))),
       h('tbody', {}, res.values.slice(0, max).map((r) => h('tr', {}, r.map((v) => h('td', { class: v === null ? 'null' : '' }, v === null ? 'NULL' : typeof v === 'number' && !Number.isInteger(v) ? String(Math.round(v * 100) / 100) : String(v)))))),
-    ),
-    h('div', { class: 'muted small' }, `${res.values.length} linha(s)${res.values.length > max ? ` — mostrando ${max}` : ''}`),
+    )),
+    h('div', { class: 'table-foot' }, `${res.values.length} linha(s)${res.values.length > max ? ` · mostrando ${max}` : ''}`),
   );
 }
 
+const hintBox = (html) => h('div', { class: 'hint-box' }, ic('lightbulb', 18), h('div', { html }));
+
 function schemaPanel() {
-  return h('details', { class: 'schema' },
-    h('summary', {}, '🗂️ Esquema do banco'),
-    h('ul', {}, SCHEMA_DOC.map((t) => h('li', {}, h('code', {}, t.tabela), ': ', t.colunas))),
+  return h('details', { class: 'panel' },
+    h('summary', {}, ic('database', 16), 'Esquema do banco'),
+    h('div', { class: 'panel-body' }, h('ul', {}, SCHEMA_DOC.map((t) => h('li', {}, h('code', {}, t.tabela), ' ', t.colunas)))),
   );
 }
 
@@ -330,24 +434,27 @@ function pythonOutput(out, res) {
   if (res.stdout) out.append(h('pre', { class: 'stdout' }, res.stdout));
   if (res.value?.kind === 'html') out.append(h('div', { class: 'table-wrap df', html: res.value.content }));
   if (res.value?.kind === 'text') out.append(h('pre', { class: 'stdout' }, res.value.content));
-  for (const f of res.figures || []) out.append(h('img', { class: 'figure', src: `data:image/png;base64,${f}`, alt: 'Gráfico gerado' }));
+  for (const f of res.figures || []) out.append(h('img', { class: 'figure', src: `data:image/png;base64,${f}`, alt: 'Gráfico gerado pelo seu código' }));
   if (res.error) {
     out.append(h('pre', { class: 'error' }, res.error));
     const hint = friendlyPyError(res.error);
-    if (hint) out.append(h('div', { class: 'hint-box', html: `💡 ${hint}` }));
+    if (hint) out.append(hintBox(hint));
   }
-  if (!out.childNodes.length) out.append(h('div', { class: 'muted small' }, 'Executado sem saída. Use print() ou deixe uma expressão na última linha.'));
+  if (!out.childNodes.length) out.append(h('div', { class: 'small faint' }, 'Executado sem saída. Use print() ou deixe uma expressão na última linha.'));
 }
 
 // ─────────────────────────────────────────── RENDERIZADORES DE PASSO
-// Cada um devolve { el, check?: async () => resultado, solution?: () => void }
-// resultado: { ok, error?, message?, hint?, explanation? }
-
+// Cada um devolve { el, check?, solution?, getCode?, onKey?, code? }
 let footerReady = () => {};
+
+const kindLabel = (text, extra = null) => h('div', { class: 'step-kind' }, text, extra);
 
 const renderers = {
   theory(step) {
-    return { el: h('div', { class: 'step theory' }, h('h2', {}, step.title), h('div', { class: 'md', html: renderMarkdown(step.md) })) };
+    return {
+      el: h('div', { class: 'step theory' }, kindLabel([ic('reader', 15), 'Teoria']),
+        h('div', { class: 'theory-card' }, h('div', { class: 'stack', style: { gap: '14px' } }, h('h2', {}, step.title), h('div', { class: 'md', html: renderMarkdown(step.md) })))),
+    };
   },
 
   quiz(step) {
@@ -365,11 +472,10 @@ const renderers = {
     const lang = /\b(import|def|print|pd\.)\b/.test(step.code) ? 'python' : 'sql';
     return {
       el: h('div', { class: 'step' },
-        h('div', { class: 'eyebrow' }, step.code ? '📖 Leia o código' : 'Escolha a resposta correta'),
+        kindLabel([ic(step.code ? 'eye' : 'list', 15), step.code ? 'Prática · Leitura de código' : 'Prática · Questão']),
         h('h2', { html: inline(step.question) }),
         step.code ? h('pre', { class: 'code' }, h('code', { html: highlight(step.code, lang) })) : null,
-        h('div', { class: 'options' }, buttons),
-      ),
+        h('div', { class: 'options' }, buttons)),
       onKey: (key) => buttons[Number(key) - 1]?.click(),
       check: async () => {
         const ok = selected === step.answer;
@@ -386,7 +492,7 @@ const renderers = {
   order(step) {
     const answer = [];
     const bank = shuffle([...step.tokens, ...step.extra].map((t, id) => ({ t, id })));
-    const answerEl = h('div', { class: 'answer-line' });
+    const answerEl = h('div', { class: 'answer-line', 'aria-label': 'Sua resposta' });
     const bankEl = h('div', { class: 'bank' });
     const draw = () => {
       put(answerEl, answer.map((tok) => h('button', { class: 'chip', onclick: () => { answer.splice(answer.indexOf(tok), 1); draw(); } }, tok.t)));
@@ -395,7 +501,7 @@ const renderers = {
     };
     draw();
     return {
-      el: h('div', { class: 'step' }, h('div', { class: 'eyebrow' }, 'Monte a resposta'), h('h2', { html: inline(step.prompt) }), answerEl, bankEl),
+      el: h('div', { class: 'step' }, kindLabel([ic('layers', 15), 'Prática · Montar a resposta']), h('h2', { html: inline(step.prompt) }), answerEl, bankEl),
       check: async () => {
         const ok = answer.map((a) => a.t).join(' ') === step.tokens.join(' ');
         return { ok, explanation: step.explanation, message: ok ? null : `Ordem correta: <code>${esc(step.tokens.join(' '))}</code>` };
@@ -410,7 +516,7 @@ const renderers = {
     parts.forEach((p, i) => {
       code.append(document.createTextNode(p));
       if (i < parts.length - 1) {
-        const inp = h('input', { class: 'blank', size: Math.max(4, ...step.blanks[i].map((b) => b.length)), autocapitalize: 'off', spellcheck: 'false', autocomplete: 'off', autocorrect: 'off' });
+        const inp = h('input', { class: 'blank', size: Math.max(4, ...step.blanks[i].map((b) => b.length)), autocapitalize: 'off', spellcheck: 'false', autocomplete: 'off', autocorrect: 'off', 'aria-label': `Lacuna ${i + 1}` });
         inp.addEventListener('input', () => footerReady(inputs.every((x) => x.value.trim())));
         inputs.push(inp);
         code.append(inp);
@@ -418,7 +524,7 @@ const renderers = {
     });
     setTimeout(() => inputs[0]?.focus(), 50);
     return {
-      el: h('div', { class: 'step' }, h('div', { class: 'eyebrow' }, 'Complete as lacunas'), h('h2', { html: inline(step.prompt) }), code),
+      el: h('div', { class: 'step' }, kindLabel([ic('code', 15), 'Prática · Completar']), h('h2', { html: inline(step.prompt) }), code),
       check: async () => {
         let ok = true;
         inputs.forEach((inp, i) => {
@@ -435,13 +541,13 @@ const renderers = {
   sql(step) {
     const out = h('div', { class: 'output' });
     const run = async () => {
-      put(out, h('div', { class: 'muted small' }, 'Executando...'));
+      put(out, h('div', { class: 'small faint loading' }, 'Executando...'));
       const db = await freshDb();
       try {
         put(out, resultTable(runQuery(db, editor.value)));
       } catch (e) {
         const hint = friendlySqlError(e.message);
-        put(out, h('pre', { class: 'error' }, `Erro: ${e.message}`), hint ? h('div', { class: 'hint-box', html: `💡 ${hint}` }) : null);
+        put(out, h('pre', { class: 'error' }, `Erro: ${e.message}`), hint ? hintBox(hint) : null);
       } finally {
         db.close();
       }
@@ -449,44 +555,37 @@ const renderers = {
     const wrap = codeEditor(step.starter, 'sql', run);
     const editor = wrap.textarea;
     editor.addEventListener('input', () => footerReady(editor.value.trim().length > 0));
-    initSql(); // pré-carrega
-    const hint = step.hint ? h('details', { class: 'hint' }, h('summary', {}, '💡 Dica'), h('div', { html: inline(step.hint) })) : null;
+    initSql();
     setTimeout(() => footerReady(editor.value.trim().length > 0), 50);
     return {
-      el: h('div', { class: 'step code-step' },
-        h('div', { class: 'eyebrow' }, step.kind === 'debug' ? '🐞 Encontre e corrija o bug' : '🗄️ Escreva a query', step.ordered ? h('span', { class: 'pill' }, 'a ordem importa') : null),
+      el: h('div', { class: 'step' },
+        kindLabel([ic(step.kind === 'debug' ? 'bug' : 'database', 15), step.kind === 'debug' ? 'Prática · Encontre o bug' : 'Prática · SQL'], step.ordered ? h('span', { class: 'badge warn pill' }, 'a ordem importa') : null),
         h('h2', { html: inline(step.prompt) }),
         schemaPanel(),
-        hint,
+        step.hint ? h('details', { class: 'panel' }, h('summary', {}, ic('lightbulb', 16), 'Dica'), h('div', { class: 'panel-body', html: inline(step.hint) })) : null,
         wrap,
-        h('div', { class: 'row' },
-          h('button', { class: 'btn ghost', onclick: run }, '▶ Executar'),
-          h('span', { class: 'muted small hide-mobile' }, 'Ctrl+Enter executa'),
-        ),
-        out,
-      ),
+        h('div', { class: 'row' }, h('button', { class: 'btn sm', onclick: run }, ic('play', 15), 'Executar'), h('span', { class: 'tiny faint hide-touch' }, 'Ctrl+Enter executa')),
+        out),
       code: true,
+      getCode: () => editor.value,
       check: async () => {
         const SQL = await initSql();
         const res = evaluateSql(() => createDb(SQL), step, editor.value);
         if (res.error) {
-          put(out, h('pre', { class: 'error' }, res.reason), res.hint ? h('div', { class: 'hint-box', html: `💡 ${res.hint}` }) : null);
-          return { ok: false, error: true };
+          put(out, h('pre', { class: 'error' }, res.reason), res.hint ? hintBox(res.hint) : null);
+          return { ok: false, error: true, message: res.reason };
         }
-        put(out, h('div', { class: 'small strong' }, 'Seu resultado:'), resultTable(res.got));
-        if (!res.ok) out.append(h('div', { class: 'small strong' }, 'Resultado esperado:'), resultTable(res.expected));
+        put(out, h('div', { class: 'small', style: { fontWeight: 600 } }, 'Seu resultado'), resultTable(res.got));
+        if (!res.ok) out.append(h('div', { class: 'small', style: { fontWeight: 600 } }, 'Resultado esperado'), resultTable(res.expected));
         return { ok: res.ok, message: res.reason, hint: res.hint };
       },
-      solution: () => {
-        editor.value = step.solution;
-        editor.dispatchEvent(new Event('input'));
-      },
+      solution: () => { editor.value = step.solution; editor.dispatchEvent(new Event('input')); },
     };
   },
 
   python(step) {
     const out = h('div', { class: 'output' });
-    const status = (msg) => put(out, h('div', { class: 'muted small loading' }, msg));
+    const status = (msg) => put(out, h('div', { class: 'small faint loading' }, msg));
     const run = async () => {
       status('Preparando o Python...');
       try {
@@ -498,23 +597,21 @@ const renderers = {
     const wrap = codeEditor(step.starter, 'python', run);
     const editor = wrap.textarea;
     editor.addEventListener('input', () => footerReady(editor.value.trim().length > 0));
-    const hint = step.hint ? h('details', { class: 'hint' }, h('summary', {}, '💡 Dica'), h('div', { html: inline(step.hint) })) : null;
-    const setupView = step.setup ? h('details', { class: 'schema' }, h('summary', {}, '📦 Dados já carregados'), h('pre', { class: 'code' }, h('code', { html: highlight(step.setup.trim(), 'python') }))) : null;
+    const dataPanel = step.setup ? h('details', { class: 'panel' },
+      h('summary', {}, ic('table', 16), 'Dados já carregados'),
+      h('div', { class: 'panel-body' }, step.setupNote ? h('p', { html: inline(step.setupNote) }) : h('pre', { class: 'code' }, h('code', { html: highlight(step.setup.trim(), 'python') })))) : null;
     setTimeout(() => footerReady(editor.value.trim().length > 0), 50);
     return {
-      el: h('div', { class: 'step code-step' },
-        h('div', { class: 'eyebrow' }, step.prompt.startsWith('🐞') ? '🐞 Encontre e corrija o bug' : '🐍 Escreva o código'),
-        h('h2', { html: inline(step.prompt) }),
-        setupView,
-        hint,
+      el: h('div', { class: 'step' },
+        kindLabel([ic(step.prompt.startsWith('🐞') ? 'bug' : 'code', 15), step.prompt.startsWith('🐞') ? 'Prática · Encontre o bug' : 'Prática · Python']),
+        h('h2', { html: inline(step.prompt.replace(/^🐞\s*/, '')) }),
+        dataPanel,
+        step.hint ? h('details', { class: 'panel' }, h('summary', {}, ic('lightbulb', 16), 'Dica'), h('div', { class: 'panel-body', html: inline(step.hint) })) : null,
         wrap,
-        h('div', { class: 'row' },
-          h('button', { class: 'btn ghost', onclick: run }, '▶ Executar'),
-          h('span', { class: 'muted small hide-mobile' }, 'Ctrl+Enter executa'),
-        ),
-        out,
-      ),
+        h('div', { class: 'row' }, h('button', { class: 'btn sm', onclick: run }, ic('play', 15), 'Executar'), h('span', { class: 'tiny faint hide-touch' }, 'Ctrl+Enter executa · a 1ª execução prepara o Python')),
+        out),
       code: true,
+      getCode: () => editor.value,
       check: async () => {
         status('Verificando...');
         let res;
@@ -522,42 +619,40 @@ const renderers = {
           res = await runPython({ setup: step.setup, code: editor.value, tests: step.tests, packages: step.packages, onStatus: status });
         } catch (e) {
           put(out, h('pre', { class: 'error' }, e.message));
-          return { ok: false, error: true };
+          return { ok: false, error: true, message: e.message };
         }
         pythonOutput(out, res);
-        if (res.error) return { ok: false, error: true };
+        if (res.error) return { ok: false, error: true, message: res.error };
         if (res.testError) return { ok: false, message: esc(res.testError), hint: friendlyPyError(res.testError) };
         return { ok: true };
       },
-      solution: () => {
-        editor.value = step.solution;
-        editor.dispatchEvent(new Event('input'));
-      },
+      solution: () => { editor.value = step.solution; editor.dispatchEvent(new Event('input')); },
     };
   },
 };
 
+// Remove marcas de emoji herdadas dos enunciados (ex.: 🐞) para o visual ficar limpo.
+for (const c of COURSES) for (const u of c.units) for (const l of u.lessons) for (const s of l.steps) if (s.prompt) s.prompt = s.prompt.replace(/^🐞\s*/, s.type === 'python' ? '🐞 ' : '');
+
 // ─────────────────────────────────────────── PLAYER DE SESSÃO
-// items: [{ step, lessonId, stepIndex }]
-// mode: 'lesson' (perde vidas) | 'practice' | 'review' | 'srs' | 'checkpoint' | 'interview'
+// items: [{ step, lessonId, stepIndex, courseId }]
+// mode: 'lesson' | 'practice' | 'review' | 'srs' | 'checkpoint' | 'interview'
 let activeSession = null;
-let keyHandler = null;
 
 function startSession({ title, items, mode, lessonId, unitId, interview, backHref }) {
-  const s = store.getState();
-  if (mode === 'lesson' && s.hearts <= 0) return noHearts(backHref);
-
   const queue = [...items];
   const totalExercises = items.filter((it) => EXERCISE_TYPES.has(it.step.type)).length;
   const failedOnce = new Set();
+  const theorySeen = new Set();
   let completedCount = 0;
   let mistakes = 0;
   let correctCount = 0;
   const startedAt = Date.now();
   let timerId = null;
+  let current = null;
 
   const progressBar = h('div', { class: 'bar' });
-  const sideInfo = h('span', { class: 'hearts-count' });
+  const meta = h('span', { class: 'session-meta' });
   const body = h('div', { class: 'session-body' });
   const footer = h('footer', { class: 'session-footer' });
 
@@ -571,18 +666,20 @@ function startSession({ title, items, mode, lessonId, unitId, interview, backHre
   activeSession = { exit };
 
   const updateHeader = () => {
-    progressBar.style.width = `${Math.round((100 * completedCount) / items.length)}%`;
-    if (mode === 'lesson') sideInfo.textContent = `❤️ ${store.getState().hearts}`;
-    else if (mode === 'interview') sideInfo.textContent = `⏱ ${fmtTime(Math.round((Date.now() - startedAt) / 1000))}`;
-    else sideInfo.textContent = { review: '🔁 revisão', srs: '🧠 revisão', checkpoint: '🏁 checkpoint', practice: '🎯 prática' }[mode];
+    progressBar.style.width = `${pct(completedCount, items.length)}%`;
+    meta.textContent = mode === 'interview' ? fmtTime(Math.round((Date.now() - startedAt) / 1000)) : `${Math.min(completedCount + 1, items.length)}/${items.length}`;
   };
   if (mode === 'interview') timerId = setInterval(updateHeader, 1000);
 
+  const modeLabel = { lesson: null, practice: 'Prática', review: 'Revisão de erros', srs: 'Revisão espaçada', checkpoint: 'Checkpoint', interview: 'Entrevista' }[mode];
   app.replaceChildren(h('div', { class: 'session' },
     h('div', { class: 'session-top' },
-      h('button', { class: 'icon-btn', 'aria-label': 'Sair', onclick: exit }, '✕'),
-      h('div', { class: 'progress big' }, progressBar),
-      sideInfo,
+      h('button', { class: 'icon-btn', 'aria-label': 'Sair', onclick: exit }, ic('x', 20)),
+      h('div', { class: 'stack', style: { gap: '6px' } },
+        h('div', { class: 'spread' }, h('span', { class: 'small', style: { fontWeight: 600 } }, title), modeLabel ? h('span', { class: 'tiny faint hide-sm' }, modeLabel) : null),
+        h('div', { class: 'progress' }, progressBar)),
+      meta,
+      h('button', { class: 'btn sm', title: 'Tirar dúvida com o tutor', onclick: () => openTutorDrawer(current) }, ic('help', 16), h('span', { class: 'hide-sm' }, 'Dúvida')),
     ),
     body,
     footer,
@@ -593,13 +690,14 @@ function startSession({ title, items, mode, lessonId, unitId, interview, backHre
     if (!queue.length) return finish();
     const item = queue[0];
     const r = renderers[item.step.type](item.step);
+    current = { step: item.step, renderer: r, feedback: '' };
     let attempts = 0;
     put(body, h('div', { class: 'step-wrap' }, r.el));
-    body.scrollTop = 0;
+    window.scrollTo(0, 0);
 
     const mainBtn = h('button', { class: 'btn primary' });
     const feedback = h('div', { class: 'feedback' });
-    const extra = h('div', { class: 'footer-extra' });
+    const extra = h('div', { class: 'row' });
     footer.className = 'session-footer';
     put(footer, h('div', { class: 'footer-inner' }, feedback, h('div', { class: 'footer-actions' }, extra, mainBtn)));
 
@@ -610,16 +708,21 @@ function startSession({ title, items, mode, lessonId, unitId, interview, backHre
     };
 
     if (!r.check) {
-      mainBtn.textContent = 'Continuar';
+      mainBtn.append('Continuar', ic('chevronRight', 18));
       footerReady = () => {};
-      mainBtn.onclick = advance;
-      keyHandler = (e) => { if (e.key === 'Enter') advance(); };
+      const go = () => {
+        if (!theorySeen.has(item)) { theorySeen.add(item); store.recordTheory(); }
+        advance();
+      };
+      mainBtn.onclick = go;
+      keyHandler = (e) => { if (e.key === 'Enter') go(); };
       return;
     }
 
-    mainBtn.textContent = 'Verificar';
+    const setMain = (label, iconName) => { put(mainBtn, label, iconName ? ic(iconName, 18) : null); };
+    setMain('Verificar');
     mainBtn.disabled = true;
-    footerReady = (ready) => { if (mainBtn.textContent === 'Verificar') mainBtn.disabled = !ready; };
+    footerReady = (ready) => { if (mainBtn.dataset.state !== 'done') mainBtn.disabled = !ready; };
     keyHandler = (e) => {
       const tag = document.activeElement?.tagName;
       if (r.onKey && /^[1-9]$/.test(e.key) && tag !== 'TEXTAREA' && tag !== 'INPUT') r.onKey(e.key);
@@ -627,84 +730,81 @@ function startSession({ title, items, mode, lessonId, unitId, interview, backHre
     };
 
     const showSolutionBtn = () => put(extra, r.solution ? h('button', {
-      class: 'btn ghost', onclick: () => { r.solution(); put(extra); if (!['review', 'interview'].includes(mode) && item.lessonId) store.recordMistake(item.lessonId, item.stepIndex); },
-    }, 'Ver solução') : null);
+      class: 'btn ghost sm',
+      onclick: () => { r.solution(); put(extra); if (!['review', 'interview'].includes(mode) && item.lessonId) store.recordMistake(item.lessonId, item.stepIndex); },
+    }, ic('eye', 15), 'Ver solução') : null);
+    const askBtn = () => h('button', { class: 'btn ghost sm', onclick: () => openTutorDrawer(current) }, ic('help', 15), 'Perguntar ao tutor');
 
     const check = async () => {
       mainBtn.disabled = true;
-      mainBtn.textContent = 'Verificando...';
+      setMain('Verificando...');
       const res = await r.check();
       attempts++;
+      current.feedback = [res.message, res.hint].filter(Boolean).join(' ').replace(/<[^>]+>/g, '');
 
       if (res.error) {
-        // erro de sintaxe/execução: não penaliza
-        mainBtn.textContent = 'Verificar';
+        setMain('Verificar');
         mainBtn.disabled = false;
-        put(feedback, h('div', { class: 'fb-title warn' }, '⚠️ Seu código deu erro — corrija e verifique de novo (sem perder vida).'));
-        if (attempts >= 2) showSolutionBtn();
+        put(feedback, h('div', { class: 'fb-title warn' }, ic('alert', 18), 'O código deu erro. Corrija e verifique de novo.'));
+        put(extra, attempts >= 2 && r.solution ? h('button', { class: 'btn ghost sm', onclick: () => { r.solution(); put(extra); } }, ic('eye', 15), 'Ver solução') : null, askBtn());
         return;
       }
 
       const firstAttempt = !failedOnce.has(item);
       if (res.ok) {
         feedbackFx('success');
-        if (firstAttempt) correctCount++;
-        if (firstAttempt && mode !== 'interview') {
-          store.recordAnswer({ lessonId: item.lessonId, stepIndex: item.stepIndex, type: item.step.type, correct: true, review: ['review', 'srs'].includes(mode) });
+        if (firstAttempt) {
+          correctCount++;
+          store.recordAnswer({ lessonId: item.lessonId, stepIndex: item.stepIndex, type: item.step.type, correct: true, review: ['review', 'srs'].includes(mode), courseId: item.courseId });
         }
-        if (mode === 'review') { store.clearMistake(item.lessonId, item.stepIndex); store.gainHeart(1); }
+        if (mode === 'review') store.clearMistake(item.lessonId, item.stepIndex);
         footer.className = 'session-footer good';
         put(feedback,
-          h('div', { class: 'fb-title' }, pick(['Excelente!', 'Mandou bem!', 'Correto!', 'Perfeito!', 'Isso aí!'])),
-          res.explanation ? h('div', { class: 'fb-text', html: inline(res.explanation) }) : null,
-        );
+          h('div', { class: 'fb-title' }, ic('circleCheck', 20), pick(['Correto', 'Muito bem', 'Exato', 'Perfeito'])),
+          res.explanation ? h('div', { class: 'fb-text', html: inline(res.explanation) }) : null);
         put(extra);
-        mainBtn.textContent = 'Continuar';
+        mainBtn.dataset.state = 'done';
+        setMain('Continuar', 'chevronRight');
+        mainBtn.className = 'btn good-solid';
         mainBtn.disabled = false;
         mainBtn.onclick = advance;
         keyHandler = (e) => { if (e.key === 'Enter' && document.activeElement?.tagName !== 'TEXTAREA') { e.preventDefault(); advance(); } };
         return;
       }
 
-      // errou
       feedbackFx('error');
-      if (firstAttempt && mode !== 'interview') store.recordAnswer({ lessonId: item.lessonId, stepIndex: item.stepIndex, type: item.step.type, correct: false });
+      if (firstAttempt) store.recordAnswer({ lessonId: item.lessonId, stepIndex: item.stepIndex, type: item.step.type, correct: false, courseId: item.courseId });
       failedOnce.add(item);
       mistakes++;
       if (!['review', 'interview'].includes(mode) && item.lessonId) store.recordMistake(item.lessonId, item.stepIndex);
-      if (mode === 'lesson') store.loseHeart();
-      updateHeader();
       footer.className = 'session-footer bad';
       put(feedback,
-        h('div', { class: 'fb-title' }, 'Não foi dessa vez'),
+        h('div', { class: 'fb-title' }, ic('alert', 20), 'Ainda não'),
         res.message ? h('div', { class: 'fb-text', html: res.message }) : null,
-        res.hint ? h('div', { class: 'fb-text hint-line', html: `💡 ${res.hint}` }) : null,
-        res.explanation ? h('div', { class: 'fb-text', html: inline(res.explanation) }) : null,
-      );
-
-      if (mode === 'lesson' && store.getState().hearts <= 0) {
-        mainBtn.textContent = 'Continuar';
-        mainBtn.disabled = false;
-        mainBtn.onclick = () => noHearts(backHref);
-        return;
-      }
+        res.hint ? h('div', { class: 'fb-text hint-line', html: res.hint }) : null,
+        res.explanation ? h('div', { class: 'fb-text', html: inline(res.explanation) }) : null);
+      mainBtn.dataset.state = 'done';
+      mainBtn.className = 'btn bad-solid';
+      mainBtn.disabled = false;
 
       if (r.code) {
-        // exercícios de código: tenta de novo no mesmo passo
-        if (mode !== 'checkpoint') showSolutionBtn();
-        mainBtn.textContent = mode === 'checkpoint' ? 'Continuar' : 'Tentar de novo';
-        mainBtn.disabled = false;
+        put(extra, mode !== 'checkpoint' && r.solution ? h('button', {
+          class: 'btn ghost sm',
+          onclick: () => { r.solution(); put(extra, askBtn()); },
+        }, ic('eye', 15), 'Ver solução') : null, askBtn());
+        setMain(mode === 'checkpoint' ? 'Continuar' : 'Tentar de novo');
         mainBtn.onclick = mode === 'checkpoint' ? advance : () => {
           footer.className = 'session-footer';
           put(feedback);
-          mainBtn.textContent = 'Verificar';
+          delete mainBtn.dataset.state;
+          mainBtn.className = 'btn primary';
+          setMain('Verificar');
           mainBtn.onclick = check;
-          mainBtn.disabled = false;
         };
       } else {
-        // demais: o exercício volta para o fim da fila (no checkpoint, segue em frente)
-        mainBtn.textContent = 'Continuar';
-        mainBtn.disabled = false;
+        put(extra, askBtn());
+        setMain('Continuar', 'chevronRight');
+        // o exercício volta para o fim da fila (no checkpoint, segue em frente)
         mainBtn.onclick = mode === 'checkpoint' ? advance : () => { queue.push(queue.shift()); showStep(); };
       }
     };
@@ -718,79 +818,70 @@ function startSession({ title, items, mode, lessonId, unitId, interview, backHre
     const secs = Math.round((Date.now() - startedAt) / 1000);
     const accuracy = totalExercises ? correctCount / totalExercises : 1;
     let xp = 0;
-    let gems = 0;
     let stars = null;
-    let headline = 'Prática concluída!';
+    let headline = 'Prática concluída';
     let subline = title;
     let passed = null;
+    let conceptCard = null;
+    let nextAction = null;
 
     if (mode === 'lesson') {
       xp = 10 + totalExercises * 2 + (mistakes === 0 ? 5 : 0);
-      gems = mistakes === 0 ? 10 : 5;
       stars = store.completeLesson(lessonId, mistakes);
-      headline = 'Lição concluída!';
+      headline = 'Lição concluída';
     } else if (mode === 'checkpoint') {
       passed = accuracy >= CHECKPOINT_PASS;
-      headline = passed ? 'Checkpoint aprovado!' : 'Quase lá!';
-      subline = passed ? 'A unidade inteira foi marcada como concluída.' : `Você precisa de ${Math.round(CHECKPOINT_PASS * 100)}% — tente de novo ou faça as lições.`;
+      headline = passed ? 'Checkpoint aprovado' : 'Quase lá';
+      subline = passed ? 'A unidade inteira foi marcada como concluída.' : `É preciso acertar ${Math.round(CHECKPOINT_PASS * 100)}%. Revise as lições e tente de novo.`;
       xp = passed ? 30 : 5 + correctCount;
-      gems = passed ? 20 : 0;
       if (passed) {
         store.passCheckpoint(unitId, accuracy);
         findUnit(unitId).unit.lessons.forEach((l) => store.completeLesson(l.id, 1, { silent: true }));
       }
     } else if (mode === 'interview') {
       const prob = interview;
-      const bonus = secs <= prob.minutes * 60;
+      const inTime = secs <= prob.minutes * 60;
       const first = store.solveInterview(prob.id, secs);
-      xp = first ? { fácil: 20, médio: 30, difícil: 40 }[prob.level] + (bonus ? 10 : 0) : 5;
-      gems = first ? 5 : 0;
-      headline = bonus ? 'Contratado! Dentro do tempo ⏱' : 'Problema resolvido!';
+      xp = first ? [0, 20, 30, 40, 50][prob.level] + (inTime ? 10 : 0) : 5;
+      headline = inTime ? 'Resolvido dentro do tempo' : 'Problema resolvido';
       subline = `${prob.title} · tempo-alvo ${prob.minutes} min`;
+      conceptCard = h('section', { class: 'card concept stack' },
+        h('span', { class: 'eyebrow' }, 'Como pensar neste problema'),
+        h('div', { class: 'md', html: renderMarkdown(prob.concept) }),
+        h('details', { class: 'panel' }, h('summary', {}, ic('code', 16), 'Uma solução de referência'),
+          h('div', { class: 'panel-body' }, h('pre', { class: 'code' }, h('code', { html: highlight(prob.step.solution, prob.step.type === 'sql' ? 'sql' : 'python') })))));
+      const list = prob.step.type === 'sql' ? INTERVIEW_SQL : INTERVIEW_PY;
+      const nxt = list.find((p) => p.level >= prob.level && p.id !== prob.id && !store.getState().interview[p.id]);
+      if (nxt) nextAction = h('button', { class: 'btn', onclick: () => startInterview(nxt) }, 'Próximo problema', ic('chevronRight', 18));
     } else {
       xp = 5 + correctCount * 2;
     }
-    store.addXp(xp);
-    if (gems) store.addGems(gems);
+    const leveledUp = store.addXp(xp);
     feedbackFx('finish');
     const missions = settleMissions();
     const awards = checkAchievements();
+    const lv = store.levelInfo(store.getState().xp);
 
-    app.replaceChildren(h('div', { class: 'finish' },
-      h('div', { class: 'finish-emoji' }, passed === false ? '💪' : mistakes === 0 ? '🏆' : '🎉'),
+    app.replaceChildren(h('div', { class: 'finish' }, h('div', { class: 'finish-card' },
+      h('span', { class: 'eyebrow' }, modeLabel || 'Lição'),
       h('h1', {}, headline),
       h('p', { class: 'muted' }, subline),
-      stars ? h('div', { class: 'stars' }, '★'.repeat(stars) + '☆'.repeat(3 - stars)) : null,
+      stars ? h('div', { class: 'stars', 'aria-label': `${stars} de 3 estrelas` }, [1, 2, 3].map((i) => h('span', { class: i <= stars ? '' : 'off' }, ic('star', 26)))) : null,
       h('div', { class: 'finish-stats' },
-        h('div', { class: 'fstat xp' }, h('span', {}, 'XP'), h('strong', {}, `+${xp}`)),
-        h('div', { class: 'fstat acc' }, h('span', {}, 'Precisão'), h('strong', {}, `${Math.round(accuracy * 100)}%`)),
-        h('div', { class: 'fstat time' }, h('span', {}, 'Tempo'), h('strong', {}, fmtTime(secs))),
-        gems ? h('div', { class: 'fstat gem' }, h('span', {}, 'Gemas'), h('strong', {}, `+${gems}`)) : null,
-      ),
-      missions.length ? h('div', { class: 'unlocks' }, missions.map((m) => h('div', { class: 'unlock' }, `${m.icon} Missão cumprida: ${m.text} (+${MISSION_REWARD} 💎)`))) : null,
-      awards.length ? h('div', { class: 'unlocks' }, awards.map((a) => h('div', { class: 'unlock award' }, `${a.icon} Conquista desbloqueada: `, h('strong', {}, a.title)))) : null,
-      h('button', { class: 'btn primary', onclick: () => { location.hash = backHref; } }, 'Continuar'),
-    ));
-    keyHandler = (e) => { if (e.key === 'Enter') location.hash = backHref; };
+        h('div', { class: 'fstat' }, h('span', {}, 'XP ganho'), h('strong', { style: { color: 'var(--xp)' } }, `+${xp}`)),
+        h('div', { class: 'fstat' }, h('span', {}, 'Precisão'), h('strong', {}, `${Math.round(accuracy * 100)}%`)),
+        h('div', { class: 'fstat' }, h('span', {}, 'Tempo'), h('strong', {}, fmtTime(secs)))),
+      leveledUp ? h('div', { class: 'unlock' }, ic('trend', 20), h('span', {}, 'Você subiu de nível: ', h('strong', {}, lv.title))) : null,
+      missions.map((m) => h('div', { class: 'unlock' }, ic('check', 18), `Missão cumprida: ${m.text} (+${MISSION_REWARD} XP)`)),
+      awards.map((a) => h('div', { class: 'unlock' }, ic(a.icon, 18), h('span', {}, 'Conquista: ', h('strong', {}, a.title)))),
+      conceptCard,
+      h('div', { class: 'row' }, h('button', { class: 'btn primary', onclick: () => { location.hash = backHref; } }, 'Continuar'), nextAction),
+    )));
+    window.scrollTo(0, 0);
+    keyHandler = (e) => { if (e.key === 'Enter' && document.activeElement?.tagName !== 'BUTTON') location.hash = backHref; };
   }
 
   showStep();
-}
-
-function noHearts(backHref) {
-  footerReady = () => {};
-  activeSession = null;
-  const s = store.getState();
-  app.replaceChildren(h('div', { class: 'finish' },
-    h('div', { class: 'finish-emoji' }, '💔'),
-    h('h1', {}, 'Suas vidas acabaram'),
-    h('p', { class: 'muted' }, `Uma nova vida chega em ${store.minutesToNextHeart()} min. Recupere vidas revisando seus erros (cada acerto devolve 1 vida) ou use 30 gemas.`),
-    h('div', { class: 'row center' },
-      h('button', { class: 'btn primary', disabled: !s.mistakes.length, onclick: () => startPractice('review') }, '🔁 Revisar erros'),
-      h('button', { class: 'btn ghost', disabled: s.gems < 30, onclick: () => { if (store.refillHearts()) { toast('❤️ Vidas recarregadas!'); location.hash = backHref; } } }, `💎 30 · Recarregar (${s.gems})`),
-      h('button', { class: 'btn ghost', onclick: () => { location.hash = backHref; } }, 'Voltar'),
-    ),
-  ));
 }
 
 function startLesson(lessonId) {
@@ -799,18 +890,21 @@ function startLesson(lessonId) {
   const { course, lesson } = found;
   if (!lessonUnlocked(course, lessonId)) { location.hash = `#/curso/${course.id}`; return; }
   const done = !!store.getState().completed[lessonId];
-  const items = lesson.steps.map((step, stepIndex) => ({ step: done ? withVariant(step) : step, lessonId, stepIndex }));
+  const items = lesson.steps.map((step, stepIndex) => ({ step: done ? withVariant(step) : step, lessonId, stepIndex, courseId: course.id }));
   startSession({ title: lesson.title, items, mode: done ? 'practice' : 'lesson', lessonId, backHref: `#/curso/${course.id}` });
 }
 
 function startCheckpoint(unitId) {
   const { course, unit } = findUnit(unitId);
-  const pool = unit.lessons.flatMap((l) => l.steps.map((step, stepIndex) => ({ step: withVariant(step), lessonId: l.id, stepIndex })))
+  const pool = unit.lessons.flatMap((l) => l.steps.map((step, stepIndex) => ({ step: withVariant(step), lessonId: l.id, stepIndex, courseId: course.id })))
     .filter((it) => EXERCISE_TYPES.has(it.step.type));
-  // equilibra: no máximo 3 exercícios de código para o checkpoint não ficar longo demais
   const code = shuffle(pool.filter((it) => ['sql', 'python'].includes(it.step.type))).slice(0, 4);
   const rest = shuffle(pool.filter((it) => !['sql', 'python'].includes(it.step.type))).slice(0, 10 - code.length);
-  startSession({ title: `Checkpoint: ${unit.title}`, items: shuffle([...code, ...rest]), mode: 'checkpoint', unitId, backHref: `#/curso/${course.id}` });
+  startSession({ title: `Checkpoint · ${unit.title}`, items: shuffle([...code, ...rest]), mode: 'checkpoint', unitId, backHref: `#/curso/${course.id}` });
+}
+
+function startInterview(prob) {
+  startSession({ title: prob.title, items: [{ step: prob.step, courseId: prob.step.type === 'sql' ? 'sql' : 'python' }], mode: 'interview', interview: prob, backHref: `#/entrevistas/${prob.step.type === 'sql' ? 'sql' : 'python'}` });
 }
 
 function startPractice(kind) {
@@ -821,17 +915,16 @@ function startPractice(kind) {
   } else if (kind === 'srs') {
     items = store.dueCards().slice(0, 10).map((c) => itemFromRef(c.lessonId, c.stepIndex)).filter(Boolean);
   } else {
-    // mistura: cards vencidos primeiro, depois exercícios das lições concluídas há mais tempo
     const due = store.dueCards().map((c) => itemFromRef(c.lessonId, c.stepIndex)).filter(Boolean);
     const done = Object.entries(s.completed).sort((a, b) => a[1].at - b[1].at).map(([id]) => id);
     const pool = [];
     for (const id of (done.length ? done : [allLessons(COURSES[0])[0].id])) {
-      findLesson(id)?.lesson.steps.forEach((step, stepIndex) => { if (EXERCISE_TYPES.has(step.type)) pool.push({ step, lessonId: id, stepIndex }); });
+      findLesson(id)?.lesson.steps.forEach((step, stepIndex) => { if (EXERCISE_TYPES.has(step.type)) pool.push(itemFromRef(id, stepIndex)); });
     }
     const seen = new Set(due.map((d) => `${d.lessonId}#${d.stepIndex}`));
     items = [...due.slice(0, 4), ...shuffle(pool.slice(0, 80)).filter((p) => !seen.has(`${p.lessonId}#${p.stepIndex}`))].slice(0, 8);
   }
-  if (!items.length) { toast('Nada para revisar agora 🎉'); location.hash = '#/praticar'; return; }
+  if (!items.length) { toast('Nada para revisar agora.'); location.hash = '#/praticar'; return; }
   items = items.map((it) => ({ ...it, step: withVariant(it.step) }));
   startSession({ title: { review: 'Revisão de erros', srs: 'Revisão espaçada' }[kind] || 'Prática rápida', items, mode: kind === 'mix' ? 'practice' : kind, backHref: '#/praticar' });
 }
@@ -840,48 +933,254 @@ function startPractice(kind) {
 function viewPractice() {
   const s = store.getState();
   const due = store.dueCards().length;
-  const units = COURSES.flatMap((c) => c.units.map((u) => ({ c, u, strength: store.srsStrength(u.lessons.map((l) => l.id)), started: u.lessons.some((l) => s.completed[l.id]) })));
+  const units = COURSES.flatMap((c) => c.units.map((u) => ({ c, u, strength: store.srsStrength(u.lessons.map((l) => l.id)), started: u.lessons.some((l) => s.completed[l.id]) }))).filter((x) => x.started);
+  const card = (iconName, title, desc, onclick, disabled = false, badge = null) => h('button', { class: 'card practice-card', disabled, onclick },
+    h('div', { class: 'spread', style: { width: '100%' } }, h('span', { class: 'pi' }, ic(iconName, 20)), badge),
+    h('h3', {}, title), h('p', { class: 'small muted' }, desc));
 
   page('practice',
-    h('h1', {}, '🎯 Praticar'),
+    pageHead('Praticar', 'Treino livre', 'Mantenha o que você aprendeu fresco. A revisão espaçada decide o que precisa voltar e quando.'),
     h('div', { class: 'practice-grid' },
-      h('button', { class: 'practice-card', disabled: !due, onclick: () => startPractice('srs') },
-        h('span', { class: 'big' }, '🧠'), h('strong', {}, `Revisão espaçada (${due})`), h('span', { class: 'muted small' }, 'O que está na hora de relembrar')),
-      h('button', { class: 'practice-card', onclick: () => startPractice('mix') },
-        h('span', { class: 'big' }, '⚡'), h('strong', {}, 'Prática rápida'), h('span', { class: 'muted small' }, '8 exercícios variados das suas lições')),
-      h('button', { class: 'practice-card', disabled: !s.mistakes.length, onclick: () => startPractice('review') },
-        h('span', { class: 'big' }, '🔁'), h('strong', {}, `Revisar erros (${s.mistakes.length})`), h('span', { class: 'muted small' }, 'Cada acerto devolve 1 vida')),
-      h('a', { class: 'practice-card', href: '#/playground' },
-        h('span', { class: 'big' }, '🧪'), h('strong', {}, 'Playground'), h('span', { class: 'muted small' }, 'SQL e Python livres')),
+      card('brain', 'Revisão espaçada', 'Os exercícios que estão na hora de relembrar.', () => startPractice('srs'), !due, due ? h('span', { class: 'badge brand' }, `${due} hoje`) : null),
+      card('bolt', 'Prática rápida', '8 exercícios variados das lições que você já fez.', () => startPractice('mix')),
+      card('repeat', 'Revisar erros', 'Refaça o que você errou até acertar.', () => startPractice('review'), !s.mistakes.length, s.mistakes.length ? h('span', { class: 'badge' }, s.mistakes.length) : null),
+      card('terminal', 'Playground', 'SQL e Python livres, com o banco de dados completo.', () => { location.hash = '#/playground'; }),
     ),
-    h('h2', { class: 'section-title' }, 'Força por unidade'),
-    h('p', { class: 'muted small' }, 'Baseada na revisão espaçada: cai quando os exercícios vencem ou quando você erra.'),
-    h('div', { class: 'skills' }, units.filter((x) => x.started).length ? units.filter((x) => x.started).map(({ c, u, strength }) => h('div', { class: 'skill' },
-      h('span', { class: 'skill-name' }, `${c.icon} ${u.title}`),
-      h('div', { class: 'progress thin' }, h('div', { class: 'bar', style: `width:${Math.round(strength * 100)}%;background:${strength > 0.7 ? 'var(--green)' : strength > 0.4 ? 'var(--orange)' : 'var(--red)'}` })),
-    )) : h('p', { class: 'muted' }, 'Faça algumas lições para ver suas habilidades aqui.')),
+    h('section', { class: 'card' },
+      h('div', { class: 'card-title' }, h('h3', {}, 'Domínio por unidade'), h('span', { class: 'tiny faint' }, 'cai quando exercícios vencem ou você erra')),
+      units.length ? units.map(({ c, u, strength }) => h('div', { class: 'mastery', style: { '--track': trackVar(c.id) } },
+        h('span', { class: 'track-chip', style: { color: 'var(--ink)' } }, h('span', { class: 'dot' }), u.title),
+        h('div', { class: 'progress' }, h('div', { class: 'bar', style: { width: `${Math.round(strength * 100)}%` } })),
+        h('span', { class: 'small faint num', style: { textAlign: 'right' } }, `${Math.round(strength * 100)}%`)))
+        : h('p', { class: 'muted small' }, 'Conclua algumas lições para ver seu domínio aqui.')),
   );
 }
 
-// ─────────────────────────────────────────── ENTREVISTA
-function viewInterview() {
+// ─────────────────────────────────────────── ENTREVISTAS
+function viewInterviews(lang = 'sql') {
   const s = store.getState();
-  const solved = INTERVIEW.filter((p) => s.interview[p.id]).length;
+  const list = lang === 'python' ? INTERVIEW_PY : INTERVIEW_SQL;
+  const solved = (l) => l.filter((p) => s.interview[p.id]).length;
   page('interview',
-    h('h1', {}, '💼 Modo entrevista'),
-    h('p', { class: 'muted' }, `Problemas clássicos de processos seletivos para analista de dados, com cronômetro. Resolva dentro do tempo-alvo para ganhar bônus. ${solved}/${INTERVIEW.length} resolvidos.`),
-    ['fácil', 'médio', 'difícil'].map((level) => h('section', {},
-      h('h2', { class: 'section-title' }, { fácil: '🟢 Fácil', médio: '🟡 Médio', difícil: '🔴 Difícil' }[level]),
-      h('div', { class: 'iv-list' }, INTERVIEW.filter((p) => p.level === level).map((p) => {
-        const st = s.interview[p.id];
-        return h('button', { class: `iv-item ${st ? 'solved' : ''}`, onclick: () => startSession({ title: p.title, items: [{ step: p.step }], mode: 'interview', interview: p, backHref: '#/entrevista' }) },
-          h('span', { class: 'iv-icon' }, st ? '✅' : p.step.type === 'sql' ? '🗄️' : '🐍'),
-          h('span', { class: 'iv-title' }, p.title),
-          h('span', { class: 'muted small' }, st ? `melhor: ${fmtTime(st.bestSecs)}` : `alvo: ${p.minutes} min`),
-        );
-      })),
-    )),
+    pageHead('Entrevistas', 'Treino para entrevistas técnicas', 'Problemas no estilo dos processos seletivos para analista e cientista de dados, com cronômetro. Depois de resolver, veja como pensar no problema e uma solução de referência.'),
+    h('div', { class: 'tabs', role: 'tablist' },
+      h('a', { class: `tab ${lang === 'sql' ? 'active' : ''}`, href: '#/entrevistas/sql', role: 'tab' }, ic('database', 16), `SQL · ${solved(INTERVIEW_SQL)}/${INTERVIEW_SQL.length}`),
+      h('a', { class: `tab ${lang === 'python' ? 'active' : ''}`, href: '#/entrevistas/python', role: 'tab' }, ic('code', 16), `Python · ${solved(INTERVIEW_PY)}/${INTERVIEW_PY.length}`)),
+    LEVELS.map((lv) => {
+      const probs = list.filter((p) => p.level === lv.id);
+      return h('section', { class: 'card level-block' },
+        h('div', { class: 'level-head' },
+          h('span', { class: 'level-badge' }, `Nível ${lv.id}`),
+          h('div', {}, h('h3', {}, lv.name), h('p', { class: 'small muted' }, lv.desc[lang])),
+          h('span', { class: 'small faint num' }, `${solved(probs)}/${probs.length}`)),
+        probs.map((p) => {
+          const st = s.interview[p.id];
+          return h('button', { class: 'iv-row', onclick: () => startInterview(p) },
+            h('span', { class: st ? 'ok' : 'todo' }, ic(st ? 'circleCheck' : 'circle', 20)),
+            h('div', {}, h('div', { class: 'iv-title' }, p.title), h('div', { class: 'tiny faint' }, st ? `melhor tempo ${fmtTime(st.bestSecs)}` : `tempo-alvo ${p.minutes} min`)),
+            h('span', { class: 'chev faint' }, ic('chevronRight', 18)));
+        }));
+    }),
   );
+}
+
+// ─────────────────────────────────────────── DÚVIDAS (busca na teoria + tutor)
+let searchIndex = null;
+function buildIndex() {
+  if (searchIndex) return searchIndex;
+  searchIndex = [];
+  for (const c of COURSES) {
+    for (const u of c.units) {
+      for (const l of u.lessons) {
+        l.steps.forEach((s) => {
+          if (s.type === 'theory') searchIndex.push({ kind: 'Teoria', title: s.title, md: s.md, courseId: c.id, where: `${c.title} · ${l.title}`, lessonId: l.id, hay: norm(`${s.title} ${s.md}`) });
+        });
+      }
+    }
+  }
+  for (const p of INTERVIEW) {
+    const lang = p.step.type === 'sql' ? 'sql' : 'python';
+    searchIndex.push({ kind: 'Entrevista', title: p.title, md: p.concept, courseId: lang, where: `Entrevista ${lang === 'sql' ? 'SQL' : 'Python'} · nível ${p.level}`, problem: p, hay: norm(`${p.title} ${p.concept} ${p.step.prompt}`) });
+  }
+  return searchIndex;
+}
+
+function searchTheory(q) {
+  const words = norm(q).split(/\s+/).filter((w) => w.length > 1);
+  if (!words.length) return [];
+  return buildIndex()
+    .map((it) => {
+      let score = 0;
+      for (const w of words) {
+        if (!it.hay.includes(w)) return null;
+        score += norm(it.title).includes(w) ? 5 : 1;
+        score += Math.min(4, it.hay.split(w).length - 1);
+      }
+      return { it, score };
+    })
+    .filter(Boolean)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 25)
+    .map((x) => x.it);
+}
+
+function snippet(md, q) {
+  const plain = md.replace(/[`*#|>~]/g, ' ').replace(/\s+/g, ' ').trim();
+  const w = norm(q).split(/\s+/).filter((x) => x.length > 1)[0] || '';
+  const i = norm(plain).indexOf(w);
+  const start = Math.max(0, i - 60);
+  let text = (start > 0 ? '…' : '') + plain.slice(start, start + 180) + (plain.length > start + 180 ? '…' : '');
+  text = esc(text);
+  for (const word of norm(q).split(/\s+/).filter((x) => x.length > 1)) {
+    const re = new RegExp(`(${word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`, 'gi');
+    text = text.replace(re, (m) => (norm(m) === word ? `<mark>${m}</mark>` : m));
+  }
+  return text;
+}
+
+function openTheory(it) {
+  const actions = [];
+  if (it.lessonId) actions.push({ label: 'Ir para a lição', onclick: () => { location.hash = `#/curso/${it.courseId}`; } });
+  if (it.problem) actions.push({ label: 'Resolver o problema', onclick: () => startInterview(it.problem) });
+  actions.push({ label: 'Perguntar ao tutor', primary: true, onclick: () => openTutorDrawer(null, `Me explique melhor: ${it.title}`) });
+  showModal(it.title, h('div', { class: 'stack theory-view' }, h('span', { class: 'track-chip', style: { '--track': trackVar(it.courseId) } }, h('span', { class: 'dot' }), it.where), h('div', { class: 'md', html: renderMarkdown(it.md) })), actions);
+}
+
+const SUGGESTIONS = ['Qual a diferença entre WHERE e HAVING?', 'Quando usar LEFT JOIN?', 'Como funciona o ROW_NUMBER?', 'O que é p-valor?', 'Diferença entre loc e iloc no pandas', 'Como interpretar um intervalo de confiança?'];
+
+function viewDoubts() {
+  const resultsEl = h('div', {});
+  const input = h('input', { type: 'search', placeholder: 'Buscar na teoria: JOIN, window function, groupby, p-valor...', 'aria-label': 'Buscar na teoria', autocomplete: 'off' });
+  const runSearch = () => {
+    const q = input.value.trim();
+    if (!q) { put(resultsEl); return; }
+    const res = searchTheory(q);
+    put(resultsEl, h('section', { class: 'card', style: { padding: '0', overflow: 'hidden' } },
+      res.length ? res.map((it) => h('button', { class: 'result', onclick: () => openTheory(it) },
+        h('div', { class: 'spread' }, h('strong', {}, it.title), h('span', { class: 'badge' }, it.kind)),
+        h('div', { class: 'tiny faint' }, it.where),
+        h('div', { class: 'small muted', html: snippet(it.md, q) })))
+        : h('div', { class: 'result', style: { cursor: 'default' } }, h('span', { class: 'muted' }, 'Nada encontrado na teoria. Pergunte ao tutor abaixo.'))));
+  };
+  input.addEventListener('input', runSearch);
+
+  page('doubts',
+    pageHead('Dúvidas', 'Tire suas dúvidas', 'Busque em toda a teoria das trilhas e nas explicações das entrevistas, ou converse com o tutor de IA.'),
+    h('div', { class: 'search' }, ic('search', 20), input),
+    resultsEl,
+    h('section', { class: 'card stack' },
+      h('div', { class: 'card-title', style: { marginBottom: 0 } }, h('div', { class: 'row' }, ic('chat', 20), h('h3', {}, 'Tutor')), h('span', { class: 'tiny faint' }, 'IA Claude, da Anthropic')),
+      chatPanel({ suggestions: SUGGESTIONS }),
+    ),
+  );
+  setTimeout(() => input.focus(), 50);
+}
+
+// ─────────────────────────────────────────── CHAT DO TUTOR
+let conversation = []; // { role, content, display? }
+
+function chatPanel({ suggestions = [], context = '' } = {}) {
+  const wrap = h('div', { class: 'chat' });
+  const log = h('div', { class: 'chat-log', 'aria-live': 'polite' });
+  const ta = h('textarea', { placeholder: 'Escreva sua dúvida...', rows: 2, 'aria-label': 'Sua dúvida' });
+  const send = h('button', { class: 'btn primary', 'aria-label': 'Enviar' }, ic('send', 18));
+  let busy = false;
+  let controller = null;
+
+  const renderLog = () => {
+    put(log, conversation.map((m) => m.role === 'user'
+      ? h('div', { class: 'msg user' }, m.display ?? m.content)
+      : h('div', { class: 'msg bot' }, h('div', { class: 'md', html: renderMarkdown(m.content || '...') }))));
+    log.scrollTop = log.scrollHeight;
+  };
+
+  const ask = async (text) => {
+    if (!text.trim() || busy) return;
+    busy = true;
+    send.disabled = true;
+    const content = conversation.length === 0 && context ? `${context}\n\nDúvida do aluno: ${text}` : text;
+    conversation.push({ role: 'user', content, display: text });
+    const reply = { role: 'assistant', content: '' };
+    conversation.push(reply);
+    renderLog();
+    const bubble = log.lastChild;
+    let raf = 0;
+    controller = new AbortController();
+    try {
+      await askTutor(conversation.slice(0, -1).map(({ role, content: c }) => ({ role, content: c })), {
+        signal: controller.signal,
+        onText: (full) => {
+          reply.content = full;
+          cancelAnimationFrame(raf);
+          raf = requestAnimationFrame(() => { put(bubble, h('div', { class: 'md', html: renderMarkdown(full) })); log.scrollTop = log.scrollHeight; });
+        },
+      });
+      checkAchievements();
+    } catch (e) {
+      if (!reply.content) conversation.splice(-2, 2); // descarta a pergunta sem resposta
+      renderLog();
+      log.append(h('div', { class: 'msg err' }, e.message));
+      if (e.code === 'setup') put(wrap, setupCard(() => put(wrap, ...chatChildren())));
+    } finally {
+      busy = false;
+      send.disabled = false;
+      renderLog();
+    }
+  };
+
+  send.onclick = () => { const t = ta.value; ta.value = ''; ask(t); };
+  ta.addEventListener('keydown', (e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send.click(); } });
+
+  const chatChildren = () => [
+    conversation.length ? h('div', { class: 'spread' }, h('span', { class: 'tiny faint' }, 'As respostas podem conter erros. Confira no app.'),
+      h('button', { class: 'btn ghost sm', onclick: () => { controller?.abort(); conversation = []; renderLog(); put(wrap, ...chatChildren()); } }, ic('reset', 14), 'Nova conversa')) : null,
+    log,
+    !conversation.length && suggestions.length ? h('div', { class: 'suggestions' }, suggestions.map((sug) => h('button', { onclick: () => ask(sug) }, sug))) : null,
+    h('div', { class: 'chat-input' }, ta, send),
+  ];
+
+  tutorMode().then((mode) => {
+    if (!mode) put(wrap, setupCard(() => put(wrap, ...chatChildren())));
+    else { put(wrap, ...chatChildren()); renderLog(); }
+  });
+  return wrap;
+}
+
+function setupCard(onDone) {
+  const key = h('input', { type: 'password', placeholder: 'sk-ant-...', 'aria-label': 'Chave de API da Anthropic', autocomplete: 'off', style: { flex: 1, minWidth: '0' } });
+  return h('div', { class: 'stack' },
+    h('p', { class: 'muted' }, 'O tutor usa a IA Claude. Para ativá-lo, crie uma chave de API da Anthropic (cobrada por uso, em geral centavos por pergunta) e cole abaixo. A chave fica salva somente neste aparelho e é enviada apenas para a Anthropic.'),
+    h('p', { class: 'small faint' }, 'Onde criar: console.anthropic.com → API Keys'),
+    h('div', { class: 'row' }, key, h('button', {
+      class: 'btn primary',
+      onclick: () => {
+        if (!/^sk-ant-/.test(key.value.trim())) { toast('A chave deve começar com sk-ant-', 'bad'); return; }
+        store.setTutorKey(key.value);
+        toast('Tutor ativado');
+        onDone();
+      },
+    }, 'Ativar tutor')),
+  );
+}
+
+function openTutorDrawer(cur, preset = '') {
+  const prevKey = keyHandler;
+  const close = () => { ov.remove(); keyHandler = prevKey; overlayClose = null; };
+  conversation = [];
+  const context = cur ? contextFromStep(cur.step, { code: cur.renderer?.getCode?.(), feedback: cur.feedback }) : '';
+  const suggestions = cur
+    ? (cur.step.type === 'theory' ? ['Pode explicar com outro exemplo?', 'Onde isso é usado no dia a dia?'] : ['Me dê uma dica sem entregar a resposta', 'Por que minha resposta está errada?', 'Explique o conceito por trás deste exercício'])
+    : (preset ? [preset] : SUGGESTIONS.slice(0, 3));
+  const ov = h('div', { class: 'drawer', onclick: (e) => { if (e.target === ov || e.target.classList.contains('drawer-spacer')) close(); } },
+    h('div', { class: 'drawer-spacer' }),
+    h('aside', { class: 'drawer-panel', role: 'dialog', 'aria-label': 'Tutor' },
+      h('div', { class: 'spread' }, h('div', { class: 'row' }, ic('chat', 20), h('h3', {}, 'Tutor')), h('button', { class: 'icon-btn', 'aria-label': 'Fechar', onclick: close }, ic('x'))),
+      cur ? h('div', { class: 'tiny faint' }, 'O tutor vê o enunciado e o seu código atual. Ele dá dicas antes de entregar a resposta.') : null,
+      chatPanel({ suggestions, context }),
+    ));
+  keyHandler = (e) => { if (e.key === 'Escape') close(); };
+  overlayClose = close;
+  document.body.append(ov);
 }
 
 // ─────────────────────────────────────────── CONQUISTAS
@@ -889,16 +1188,14 @@ function viewAchievements() {
   const s = store.getState();
   const got = ACHIEVEMENTS.filter((a) => s.achievements[a.id]).length;
   page('awards',
-    h('h1', {}, '🏆 Conquistas'),
-    h('p', { class: 'muted' }, `${got} de ${ACHIEVEMENTS.length} desbloqueadas`),
+    pageHead('Conquistas', `${got} de ${ACHIEVEMENTS.length} desbloqueadas`, 'Marcos da sua jornada nas trilhas e nas entrevistas.'),
     h('div', { class: 'awards' }, ACHIEVEMENTS.map((a) => {
       const at = s.achievements[a.id];
-      return h('div', { class: `award-card ${at ? 'got' : ''}` },
-        h('div', { class: 'award-icon' }, at ? a.icon : '🔒'),
+      return h('div', { class: `card award ${at ? 'got' : ''}` },
+        h('span', { class: 'ai' }, ic(at ? a.icon : 'lock', 20)),
         h('strong', {}, a.title),
-        h('span', { class: 'muted small' }, a.desc),
-        at ? h('span', { class: 'small ok-text' }, new Date(at).toLocaleDateString('pt-BR')) : null,
-      );
+        h('span', { class: 'small muted' }, a.desc),
+        at ? h('span', { class: 'tiny', style: { color: 'var(--good)' } }, new Date(at).toLocaleDateString('pt-BR')) : null);
     })),
   );
 }
@@ -911,16 +1208,16 @@ function viewPlayground(tab = 'sql') {
     const db = await freshDb();
     try {
       const results = db.exec(editor.value);
-      put(out, results.length ? results.map(resultTable) : h('div', { class: 'muted small' }, 'Comando executado (sem linhas retornadas).'));
+      put(out, results.length ? results.map(resultTable) : h('div', { class: 'small faint' }, 'Comando executado (sem linhas retornadas).'));
     } catch (e) {
       const hint = friendlySqlError(e.message);
-      put(out, h('pre', { class: 'error' }, `Erro: ${e.message}`), hint ? h('div', { class: 'hint-box', html: `💡 ${hint}` }) : null);
+      put(out, h('pre', { class: 'error' }, `Erro: ${e.message}`), hint ? hintBox(hint) : null);
     } finally {
       db.close();
     }
   };
   const runPy = async () => {
-    const status = (m) => put(out, h('div', { class: 'muted small loading' }, m));
+    const status = (m) => put(out, h('div', { class: 'small faint loading' }, m));
     try {
       pythonOutput(out, await runPython({ code: editor.value, onStatus: status }));
     } catch (e) {
@@ -929,28 +1226,106 @@ function viewPlayground(tab = 'sql') {
   };
   const run = tab === 'sql' ? runSql : runPy;
   const wrap = codeEditor(tab === 'sql'
-    ? "-- O banco da DataShop é recriado a cada execução\nSELECT categoria, COUNT(*) AS produtos, ROUND(AVG(preco), 2) AS preco_medio\nFROM produtos\nGROUP BY categoria\nORDER BY preco_medio DESC;"
-    : 'import pandas as pd\nimport matplotlib.pyplot as plt\n\ndf = pd.DataFrame({"mes": ["jan", "fev", "mar", "abr"], "receita": [8987, 5747, 8395, 4185]})\ndf.plot(x="mes", y="receita", kind="bar", legend=False, title="Receita mensal")\ndf.describe()',
+    ? "-- O banco é recriado a cada execução\nSELECT loja, ROUND(AVG(receita), 2) AS receita_media, COUNT(*) AS dias\nFROM vendas_diarias\nGROUP BY loja\nORDER BY receita_media DESC;"
+    : 'import numpy as np\n\nvendas = np.array([5106, 6668, 8240])\nprint("média:", vendas.mean())\nvendas / vendas.sum()',
   tab, () => run());
   editor = wrap.textarea;
 
   page('practice',
-    h('a', { class: 'back', href: '#/praticar' }, '← Praticar'),
-    h('h1', {}, '🧪 Playground'),
+    h('a', { class: 'btn ghost sm', href: '#/praticar', style: { alignSelf: 'flex-start' } }, ic('arrowLeft', 16), 'Praticar'),
+    pageHead('Playground', 'Experimente à vontade', 'Sem correção e sem XP. O banco tem as tabelas da loja e os dados de estatística.'),
     h('div', { class: 'tabs' },
-      h('a', { class: `tab ${tab === 'sql' ? 'active' : ''}`, href: '#/playground/sql' }, 'SQL'),
-      h('a', { class: `tab ${tab === 'python' ? 'active' : ''}`, href: '#/playground/python' }, 'Python'),
-    ),
-    tab === 'sql' ? schemaPanel() : h('p', { class: 'muted small' }, 'Bibliotecas disponíveis offline: pandas, NumPy, matplotlib, BeautifulSoup, sqlite3. Na versão web, outras (SciPy, scikit-learn...) são baixadas sob demanda.'),
+      h('a', { class: `tab ${tab === 'sql' ? 'active' : ''}`, href: '#/playground/sql' }, ic('database', 16), 'SQL'),
+      h('a', { class: `tab ${tab === 'python' ? 'active' : ''}`, href: '#/playground/python' }, ic('code', 16), 'Python')),
+    tab === 'sql' ? schemaPanel() : h('p', { class: 'small muted' }, IS_DEMO ? 'Na demonstração: NumPy, BeautifulSoup e sqlite3. No app instalado também pandas e matplotlib, offline.' : 'Disponíveis offline: pandas, NumPy, matplotlib, BeautifulSoup e sqlite3.'),
     wrap,
-    h('div', { class: 'row' }, h('button', { class: 'btn primary', onclick: run }, '▶ Executar'), h('span', { class: 'muted small hide-mobile' }, 'Ctrl+Enter')),
+    h('div', { class: 'row' }, h('button', { class: 'btn primary', onclick: run }, ic('play', 16), 'Executar'), h('span', { class: 'tiny faint hide-touch' }, 'Ctrl+Enter')),
     out,
   );
 }
 
-// ─────────────────────────────────────────── PERFIL
+// ─────────────────────────────────────────── PERFIL E ESTATÍSTICAS
+function weeklyXp(weeks = 10) {
+  const s = store.getState();
+  const out = [];
+  const now = new Date();
+  const monday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - ((now.getDay() + 6) % 7));
+  for (let w = weeks - 1; w >= 0; w--) {
+    const start = new Date(monday.getTime() - w * 7 * 86400000);
+    let xp = 0;
+    for (let d = 0; d < 7; d++) xp += s.history[store.today(new Date(start.getTime() + d * 86400000))] || 0;
+    out.push({ label: start.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' }), xp });
+  }
+  return out;
+}
+
+function barChart(data) {
+  const W = 640;
+  const H = 210;
+  const pad = { l: 40, r: 8, t: 12, b: 28 };
+  const max = Math.max(10, ...data.map((d) => d.xp));
+  const step = Math.pow(10, Math.floor(Math.log10(max))) / (max / Math.pow(10, Math.floor(Math.log10(max))) > 5 ? 0.5 : 1);
+  const top = Math.ceil(max / step) * step;
+  const y = (v) => pad.t + (H - pad.t - pad.b) * (1 - v / top);
+  const bw = (W - pad.l - pad.r) / data.length;
+  const ticks = [0, top / 2, top];
+  const tip = h('div', { class: 'tooltip', hidden: true });
+  const svgNS = 'http://www.w3.org/2000/svg';
+  const svg = document.createElementNS(svgNS, 'svg');
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.setAttribute('role', 'img');
+  svg.setAttribute('aria-label', `XP por semana nas últimas ${data.length} semanas. ${data.map((d) => `${d.label}: ${d.xp} XP`).join('; ')}`);
+  const el = (tag, attrs) => { const e = document.createElementNS(svgNS, tag); for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v); return e; };
+  for (const t of ticks) {
+    svg.append(el('line', { x1: pad.l, x2: W - pad.r, y1: y(t), y2: y(t), class: t === 0 ? 'axis' : 'grid' }));
+    const lbl = el('text', { x: pad.l - 8, y: y(t) + 4, 'text-anchor': 'end' });
+    lbl.textContent = Math.round(t);
+    svg.append(lbl);
+  }
+  data.forEach((d, i) => {
+    const x = pad.l + i * bw + bw * 0.22;
+    const w = bw * 0.56;
+    const yy = y(d.xp);
+    const base = y(0);
+    const r = Math.min(4, (base - yy) / 2, w / 2);
+    if (d.xp > 0) {
+      const path = el('path', { class: `bar${i === data.length - 1 ? ' hot' : ''}`, d: `M${x},${base} V${yy + r} Q${x},${yy} ${x + r},${yy} H${x + w - r} Q${x + w},${yy} ${x + w},${yy + r} V${base} Z` });
+      svg.append(path);
+    }
+    const hit = el('rect', { x: pad.l + i * bw, y: pad.t, width: bw, height: H - pad.t - pad.b, fill: 'transparent' });
+    hit.addEventListener('mouseenter', () => {
+      tip.hidden = false;
+      tip.textContent = `Semana de ${d.label}: ${d.xp} XP`;
+      const rect = svg.getBoundingClientRect();
+      tip.style.left = `${((x + w / 2) / W) * rect.width}px`;
+      tip.style.top = `${(Math.min(yy, base - 2) / H) * rect.height}px`;
+    });
+    hit.addEventListener('mouseleave', () => { tip.hidden = true; });
+    svg.append(hit);
+    if (i % 2 === (data.length - 1) % 2) {
+      const lbl = el('text', { x: x + w / 2, y: H - 8, 'text-anchor': 'middle' });
+      lbl.textContent = d.label;
+      svg.append(lbl);
+    }
+  });
+  return h('div', { class: 'chart' }, svg, tip);
+}
+
+function settingRow(title, desc, control) {
+  return h('div', { class: 'setting' }, h('div', {}, h('div', { style: { fontWeight: 600 } }, title), desc ? h('div', { class: 'small muted' }, desc) : null), control);
+}
+
+function toggle(id, label, value, onchange) {
+  return h('label', { class: 'switch', for: id }, h('input', { type: 'checkbox', id, checked: value, 'aria-label': label, onchange: (e) => onchange(e.target.checked) }), h('span', {}));
+}
+
+function segmented(options, value, onchange) {
+  return h('div', { class: 'tabs' }, options.map(([v, label]) => h('button', { class: `tab ${value === v ? 'active' : ''}`, onclick: () => onchange(v) }, label)));
+}
+
 function viewProfile() {
   const s = store.getState();
+  const lv = store.levelInfo(s.xp);
   const days = [];
   for (let i = 83; i >= 0; i--) {
     const d = store.today(new Date(Date.now() - i * 86400000));
@@ -958,108 +1333,117 @@ function viewProfile() {
   }
   const level = (xp) => (xp === 0 ? 0 : xp < 20 ? 1 : xp < 50 ? 2 : xp < 100 ? 3 : 4);
   const totalLessons = COURSES.reduce((a, c) => a + allLessons(c).length, 0);
-  const accuracy = s.totals.answered ? Math.round((100 * s.totals.correct) / s.totals.answered) : 0;
-  const set = settings();
+  const accuracy = pct(s.totals.correct, s.totals.answered);
   const r = s.reminder;
-  const backupBox = h('div', { class: 'backup' });
-
-  const toggle = (label, value, onchange) => h('label', { class: 'toggle' },
-    h('input', { type: 'checkbox', checked: value, onchange: (e) => onchange(e.target.checked) }), h('span', {}, label));
+  const backupBox = h('div', { class: 'stack' });
+  const weeks = weeklyXp(10);
+  const ivSolved = Object.keys(s.interview).length;
 
   page('profile',
-    h('h1', {}, '👤 Seu progresso'),
-    h('div', { class: 'profile-stats' },
-      h('div', { class: 'pstat' }, h('strong', {}, `🔥 ${s.streak}`), h('span', {}, `ofensiva · recorde ${s.bestStreak}`)),
-      h('div', { class: 'pstat' }, h('strong', {}, `⚡ ${s.xp}`), h('span', {}, 'XP total')),
-      h('div', { class: 'pstat' }, h('strong', {}, `📚 ${Object.keys(s.completed).length}/${totalLessons}`), h('span', {}, 'lições')),
-      h('div', { class: 'pstat' }, h('strong', {}, `🎯 ${accuracy}%`), h('span', {}, `precisão · ${s.totals.answered} respostas`)),
-    ),
-    h('h2', { class: 'section-title' }, 'Atividade (últimas 12 semanas)'),
-    h('div', { class: 'heatmap' }, days.map((d) => h('div', { class: `cell l${level(d.xp)}`, title: `${d.d}: ${d.xp} XP` }))),
-
-    h('h2', { class: 'section-title' }, '💎 Loja'),
-    h('p', { class: 'muted small' }, `Você tem ${s.gems} gemas. Ganhe gemas concluindo lições, missões e checkpoints.`),
-    h('div', { class: 'shop' },
-      h('div', { class: 'shop-item' },
-        h('span', { class: 'big' }, '🧊'),
-        h('div', {}, h('strong', {}, 'Protetor de ofensiva'), h('div', { class: 'muted small' }, `Salva sua ofensiva se você ficar um dia sem praticar. Você tem ${s.freezes}/${store.MAX_FREEZES}.`)),
-        h('button', { class: 'btn ghost', disabled: s.gems < store.FREEZE_PRICE || s.freezes >= store.MAX_FREEZES, onclick: () => { if (store.buyFreeze()) { toast('🧊 Protetor comprado!'); viewProfile(); } } }, `💎 ${store.FREEZE_PRICE}`),
-      ),
-      h('div', { class: 'shop-item' },
-        h('span', { class: 'big' }, '❤️'),
-        h('div', {}, h('strong', {}, 'Recarregar vidas'), h('div', { class: 'muted small' }, `Volta para ${store.MAX_HEARTS} vidas agora.`)),
-        h('button', { class: 'btn ghost', disabled: s.gems < 30 || s.hearts >= store.MAX_HEARTS, onclick: () => { if (store.refillHearts()) { toast('❤️ Vidas recarregadas!'); viewProfile(); } } }, '💎 30'),
-      ),
-    ),
-
-    h('h2', { class: 'section-title' }, 'Meta diária'),
-    h('div', { class: 'row' }, [10, 30, 50, 100].map((g) => h('button', {
-      class: `btn ${s.dailyGoal === g ? 'primary' : 'ghost'}`,
-      onclick: () => { store.setDailyGoal(g); viewProfile(); },
-    }, `${g} XP`))),
-
-    h('h2', { class: 'section-title' }, '⚙️ Preferências'),
-    h('div', { class: 'settings' },
-      toggle('Sons', set.sound, (v) => { set.sound = v; store.save(); }),
-      toggle('Vibração', set.haptics, (v) => { set.haptics = v; store.save(); }),
-      platform.remindersSupported() ? h('div', { class: 'reminder' },
-        toggle('Lembrete diário', r.enabled, async (v) => {
-          const ok = await platform.scheduleReminder({ ...r, enabled: v });
-          store.setReminder({ enabled: v && ok });
-          if (v && !ok) toast('Permita as notificações do DataLingo nas configurações do sistema.', 'bad');
-          else if (v) toast(`🔔 Lembrete às ${String(r.hour).padStart(2, '0')}:${String(r.minute).padStart(2, '0')}`);
-          viewProfile();
+    pageHead('Perfil', 'Seu progresso', null),
+    h('section', { class: 'card level-card' },
+      h('span', { class: 'level-num' }, lv.index),
+      h('div', { class: 'stack', style: { gap: '8px' } },
+        h('div', { class: 'spread' }, h('h2', {}, lv.title), h('span', { class: 'num', style: { color: 'var(--xp)', fontWeight: 600 } }, `${s.xp} XP`)),
+        h('div', { class: 'progress lg' }, h('div', { class: 'bar', style: { width: `${Math.round(lv.progress * 100)}%`, background: 'var(--xp)' } })),
+        h('span', { class: 'small muted' }, lv.next ? `Faltam ${lv.toNext} XP para ${lv.next}` : 'Você alcançou o nível máximo.'))),
+    h('div', { class: 'tiles' },
+      h('div', { class: 'card tile' }, h('strong', {}, `${Object.keys(s.completed).length}/${totalLessons}`), h('span', {}, 'lições concluídas')),
+      h('div', { class: 'card tile' }, h('strong', {}, `${accuracy}%`), h('span', {}, `de acerto em ${s.totals.answered} respostas`)),
+      h('div', { class: 'card tile' }, h('strong', {}, s.totals.theoryRead), h('span', {}, 'cards de teoria estudados')),
+      h('div', { class: 'card tile' }, h('strong', {}, `${ivSolved}/${INTERVIEW.length}`), h('span', {}, 'problemas de entrevista'))),
+    h('div', { class: 'grid-2' },
+      h('section', { class: 'card' },
+        h('div', { class: 'card-title' }, h('h3', {}, 'XP por semana'), h('span', { class: 'tiny faint' }, 'últimas 10 semanas')),
+        barChart(weeks),
+        h('details', { class: 'panel', style: { marginTop: '10px' } }, h('summary', {}, ic('table', 15), 'Ver como tabela'),
+          h('div', { class: 'panel-body' }, h('div', { class: 'table-wrap' }, h('table', {}, h('thead', {}, h('tr', {}, h('th', {}, 'Semana de'), h('th', {}, 'XP'))), h('tbody', {}, weeks.map((w) => h('tr', {}, h('td', {}, w.label), h('td', {}, w.xp))))))))),
+      h('section', { class: 'card' },
+        h('div', { class: 'card-title' }, h('h3', {}, 'Acerto por trilha'), h('span', { class: 'tiny faint' }, '1ª tentativa')),
+        COURSES.map((c) => {
+          const t = s.topics[c.id] || { correct: 0, answered: 0 };
+          const p = pct(t.correct, t.answered);
+          return h('div', { class: 'hbar', style: { '--track': trackVar(c.id) } },
+            h('span', { class: 'track-chip', style: { color: 'var(--ink)' } }, h('span', { class: 'dot' }), c.id === 'sql' ? 'SQL' : c.id === 'python' ? 'Python' : 'Estatística'),
+            h('div', { class: 'track' }, h('div', { class: 'fillbar', style: { width: `${p}%` } })),
+            h('span', { class: 'small num', style: { textAlign: 'right' } }, t.answered ? `${p}%` : '—'));
         }),
-        h('input', {
-          type: 'time', value: `${String(r.hour).padStart(2, '0')}:${String(r.minute).padStart(2, '0')}`,
-          onchange: async (e) => {
-            const [hh, mm] = e.target.value.split(':').map(Number);
-            store.setReminder({ hour: hh, minute: mm });
-            if (store.getState().reminder.enabled) await platform.scheduleReminder(store.getState().reminder);
-          },
-        }),
-        platform.isAndroid() ? null : h('span', { class: 'muted small' }, '(no computador, o aviso aparece com o app aberto)'),
-      ) : null,
-    ),
+        h('div', { class: 'card-title', style: { marginTop: '18px' } }, h('h3', {}, 'Atividade'), h('span', { class: 'tiny faint' }, `${store.daysStudied()} dias estudados`)),
+        h('div', { class: 'heatmap', role: 'img', 'aria-label': 'Atividade diária nas últimas 12 semanas' }, days.map((d) => h('div', { class: `cell l${level(d.xp)}`, title: `${d.d}: ${d.xp} XP` }))))),
+    h('a', { class: 'card review-banner', href: '#/conquistas' },
+      h('span', { class: 'ri', style: { background: 'color-mix(in srgb, var(--xp) 16%, transparent)', color: 'var(--xp)' } }, ic('trophy', 22)),
+      h('div', {}, h('div', { style: { fontWeight: 600 } }, 'Conquistas'), h('div', { class: 'small muted' }, `${Object.keys(s.achievements).length} de ${ACHIEVEMENTS.length} desbloqueadas`)),
+      ic('chevronRight', 20)),
 
-    h('h2', { class: 'section-title' }, '🔄 Backup e sincronização'),
-    h('p', { class: 'muted small' }, 'Leve seu progresso do celular para o computador (ou vice-versa): exporte o código em um aparelho e importe no outro.'),
-    h('div', { class: 'row' },
-      h('button', {
-        class: 'btn ghost',
-        onclick: async () => {
-          const code = store.exportCode();
-          const ta = h('textarea', { class: 'editor small-editor', readonly: true }, code);
-          put(backupBox, ta);
-          ta.select();
-          try { await platform.copyText(code); toast('📋 Código copiado! Cole no outro aparelho.'); } catch { toast('Selecione e copie o código abaixo.'); }
-        },
-      }, 'Exportar'),
-      h('button', {
-        class: 'btn ghost',
-        onclick: () => {
-          const ta = h('textarea', { class: 'editor small-editor', placeholder: 'Cole aqui o código que começa com DL1:' });
-          put(backupBox, ta, h('button', {
-            class: 'btn primary',
-            onclick: async () => {
-              try {
-                if (!await askConfirm('Substituir o progresso deste aparelho pelo do código?', { ok: 'Substituir', danger: true })) return;
-                store.importCode(ta.value);
-                toast('✅ Progresso importado!');
-                viewProfile();
-              } catch (e) { toast(esc(e.message), 'bad'); }
+    h('section', { class: 'card' },
+      h('div', { class: 'card-title' }, h('h3', {}, 'Preferências')),
+      h('div', { class: 'settings' },
+        settingRow('Tema', null, segmented([['system', 'Sistema'], ['light', 'Claro'], ['dark', 'Escuro']], s.settings.theme, (v) => { store.setSetting('theme', v); applyTheme(); viewProfile(); })),
+        settingRow('Meta diária', 'XP por dia', segmented([[10, '10'], [30, '30'], [50, '50'], [100, '100']], s.dailyGoal, (v) => { store.setDailyGoal(v); viewProfile(); })),
+        settingRow('Sons', 'Toque curto ao acertar e errar', toggle('set-sound', 'Sons', s.settings.sound, (v) => store.setSetting('sound', v))),
+        settingRow('Vibração', 'No celular', toggle('set-haptics', 'Vibração', s.settings.haptics, (v) => store.setSetting('haptics', v))),
+        platform.remindersSupported() ? settingRow('Lembrete diário', platform.isAndroid() ? 'Notificação no horário escolhido' : 'Aparece com o app aberto', h('div', { class: 'row' },
+          h('input', {
+            type: 'time', 'aria-label': 'Horário do lembrete', value: `${String(r.hour).padStart(2, '0')}:${String(r.minute).padStart(2, '0')}`,
+            onchange: async (e) => {
+              const [hh, mm] = e.target.value.split(':').map(Number);
+              store.setReminder({ hour: hh, minute: mm });
+              if (store.getState().reminder.enabled) await platform.scheduleReminder(store.getState().reminder);
             },
-          }, 'Importar progresso'));
-        },
-      }, 'Importar'),
-    ),
-    backupBox,
+          }),
+          toggle('set-reminder', 'Lembrete diário', r.enabled, async (v) => {
+            const ok = await platform.scheduleReminder({ ...r, enabled: v });
+            store.setReminder({ enabled: v && ok });
+            if (v && !ok) toast('Permita as notificações do Datum nas configurações do sistema.', 'bad');
+            else if (v) toast(`Lembrete às ${String(r.hour).padStart(2, '0')}:${String(r.minute).padStart(2, '0')}`, '', 'bell');
+          }))) : null,
+      )),
 
-    h('div', { class: 'danger-zone' },
-      h('button', { class: 'btn ghost danger', onclick: async () => { if (await askConfirm('Apagar todo o progresso? Isso não pode ser desfeito.', { ok: 'Apagar', danger: true })) { store.resetProgress(); viewProfile(); } } }, 'Apagar progresso'),
-      h('button', { class: 'btn ghost', onclick: unlockAll }, 'Desbloquear tudo (modo professor)'),
-    ),
-    h('p', { class: 'muted small center' }, `DataLingo · ${platform.platformName()}`),
+    h('section', { class: 'card' },
+      h('div', { class: 'card-title' }, h('h3', {}, 'Tutor de IA'), s.tutor.apiKey ? h('span', { class: 'badge good' }, 'ativo') : isDemoRuntime() ? h('span', { class: 'badge brand' }, 'via Claude') : h('span', { class: 'badge' }, 'inativo')),
+      s.tutor.apiKey
+        ? h('div', { class: 'spread' }, h('span', { class: 'small muted' }, `Chave salva neste aparelho (termina em …${s.tutor.apiKey.slice(-4)}).`),
+          h('button', { class: 'btn sm danger', onclick: () => { store.setTutorKey(''); toast('Chave removida'); viewProfile(); } }, 'Remover chave'))
+        : isDemoRuntime() ? h('p', { class: 'small muted' }, 'Nesta demonstração o tutor usa o Claude da sua conta, sem chave.')
+          : setupCard(() => viewProfile())),
+
+    h('section', { class: 'card stack' },
+      h('div', { class: 'card-title', style: { marginBottom: 0 } }, h('h3', {}, 'Backup e sincronização')),
+      h('p', { class: 'small muted' }, 'Leve seu progresso do celular para o computador (ou o contrário): exporte o código num aparelho e importe no outro. A chave do tutor não é incluída.'),
+      h('div', { class: 'row' },
+        h('button', {
+          class: 'btn sm',
+          onclick: async () => {
+            const code = store.exportCode();
+            const ta = h('textarea', { class: 'small-editor', readonly: true, 'aria-label': 'Código de backup' }, code);
+            put(backupBox, ta);
+            ta.select();
+            try { await platform.copyText(code); toast('Código copiado. Cole no outro aparelho.', '', 'copy'); } catch { toast('Selecione e copie o código abaixo.'); }
+          },
+        }, ic('upload', 15), 'Exportar'),
+        h('button', {
+          class: 'btn sm',
+          onclick: () => {
+            const ta = h('textarea', { class: 'small-editor', placeholder: 'Cole aqui o código que começa com DL1:', 'aria-label': 'Código para importar' });
+            put(backupBox, ta, h('button', {
+              class: 'btn primary sm', style: { alignSelf: 'flex-start' },
+              onclick: async () => {
+                try {
+                  if (!await askConfirm('Substituir o progresso deste aparelho pelo do código?', { ok: 'Substituir', danger: true })) return;
+                  store.importCode(ta.value);
+                  toast('Progresso importado');
+                  viewProfile();
+                } catch (e) { toast(e.message, 'bad'); }
+              },
+            }, 'Importar progresso'));
+          },
+        }, ic('download', 15), 'Importar')),
+      backupBox),
+
+    h('div', { class: 'row' },
+      h('button', { class: 'btn sm danger', onclick: async () => { if (await askConfirm('Apagar todo o progresso? Isso não pode ser desfeito.', { ok: 'Apagar', danger: true })) { store.resetProgress(); viewProfile(); } } }, ic('trash', 15), 'Apagar progresso'),
+      h('button', { class: 'btn sm ghost', onclick: unlockAll }, 'Desbloquear tudo (modo professor)')),
+    h('p', { class: 'tiny faint' }, `${APP_NAME} · ${platform.platformName()}`),
   );
 }
 
@@ -1076,12 +1460,15 @@ function route() {
   keyHandler = null;
   footerReady = () => {};
   activeSession = null;
+  overlayClose?.();
+  document.querySelectorAll('.drawer, .modal-backdrop').forEach((n) => n.remove());
   const [, view, arg] = location.hash.replace(/^#/, '').split('/');
   switch (view) {
     case 'curso': return viewCourse(arg);
     case 'licao': return startLesson(arg);
     case 'praticar': return viewPractice();
-    case 'entrevista': return viewInterview();
+    case 'entrevistas': case 'entrevista': return viewInterviews(arg === 'python' ? 'python' : 'sql');
+    case 'duvidas': return viewDoubts();
     case 'conquistas': return viewAchievements();
     case 'playground': return viewPlayground(arg || 'sql');
     case 'perfil': return viewProfile();
@@ -1089,18 +1476,18 @@ function route() {
   }
 }
 
-// Android: o botão "voltar" sai da lição (com confirmação), volta de tela ou fecha o app na home.
+// Android: "voltar" fecha diálogos, sai da lição (com confirmação), volta de tela ou fecha o app na home.
 platform.onBackButton(() => {
+  if (overlayClose) return overlayClose();
   if (activeSession) return activeSession.exit();
   if (!location.hash || location.hash === '#/') return platform.exitApp();
   history.back();
 });
 
-const darkQuery = window.matchMedia('(prefers-color-scheme: dark)');
-platform.styleStatusBar(darkQuery.matches);
-darkQuery.addEventListener?.('change', (e) => platform.styleStatusBar(e.matches));
-platform.startInAppReminderLoop(store.getState);
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener?.('change', applyTheme);
 document.documentElement.dataset.platform = platform.platformName();
+applyTheme();
+platform.startInAppReminderLoop(store.getState);
 
 if (IS_DEMO && !store.getState().demoSeeded) {
   store.seedDemo(COURSES.map((c) => allLessons(c).map((l) => l.id)), INTERVIEW.map((p) => p.id));

@@ -1,13 +1,22 @@
 {
-  "name": "DataLingo — SQL e Python para dados",
-  "short_name": "DataLingo",
+  "name": "Datum — SQL, Python e estatística",
+  "short_name": "Datum",
   "start_url": "./",
   "display": "standalone",
-  "background_color": "#ffffff",
-  "theme_color": "#58cc02",
+  "background_color": "#f4f5f7",
+  "theme_color": "#11161c",
   "lang": "pt-BR",
   "icons": [
-    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+    {
+      "src": "icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
   ]
 }

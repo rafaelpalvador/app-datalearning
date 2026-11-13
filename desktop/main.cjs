@@ -7,14 +7,18 @@ const fs = require('node:fs');
 
 const ROOT = path.join(__dirname, '..');
 const SCHEME = 'app';
-const HOST = 'datalingo';
+const HOST = 'datalingo'; // mantido: o localStorage pertence a esta origem
 
 const MIME = {
   '.html': 'text/html; charset=utf-8', '.js': 'text/javascript; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8',
   '.css': 'text/css; charset=utf-8', '.json': 'application/json', '.webmanifest': 'application/manifest+json',
   '.wasm': 'application/wasm', '.png': 'image/png', '.svg': 'image/svg+xml', '.zip': 'application/zip',
-  '.whl': 'application/zip', '.ico': 'image/x-icon', '.map': 'application/json', '.tar': 'application/x-tar',
+  '.whl': 'application/zip', '.ico': 'image/x-icon', '.woff2': 'font/woff2', '.txt': 'text/plain; charset=utf-8', '.map': 'application/json', '.tar': 'application/x-tar',
 };
+
+// Mantém a pasta de dados da 1ª versão (DataLingo) para não perder o progresso ao atualizar.
+app.setName('Datum');
+app.setPath('userData', path.join(app.getPath('appData'), 'DataLingo'));
 
 protocol.registerSchemesAsPrivileged([{
   scheme: SCHEME,
@@ -32,9 +36,9 @@ function createWindow() {
     height: 860,
     minWidth: 380,
     minHeight: 600,
-    title: 'DataLingo',
+    title: 'Datum',
     icon: path.join(ROOT, 'assets', 'icon.png'),
-    backgroundColor: nativeTheme.shouldUseDarkColors ? '#131f24' : '#ffffff',
+    backgroundColor: nativeTheme.shouldUseDarkColors ? '#0b0d10' : '#f4f5f7',
     autoHideMenuBar: true,
     show: false,
     webPreferences: {
@@ -79,7 +83,7 @@ app.whenReady().then(() => {
   });
 
   Menu.setApplicationMenu(Menu.buildFromTemplate([
-    { label: 'DataLingo', submenu: [{ role: 'reload', label: 'Recarregar' }, { role: 'toggleDevTools', label: 'Ferramentas do desenvolvedor' }, { type: 'separator' }, { role: 'quit', label: 'Sair' }] },
+    { label: 'Datum', submenu: [{ role: 'reload', label: 'Recarregar' }, { role: 'toggleDevTools', label: 'Ferramentas do desenvolvedor' }, { type: 'separator' }, { role: 'quit', label: 'Sair' }] },
     { label: 'Editar', submenu: [{ role: 'undo', label: 'Desfazer' }, { role: 'redo', label: 'Refazer' }, { type: 'separator' }, { role: 'cut', label: 'Recortar' }, { role: 'copy', label: 'Copiar' }, { role: 'paste', label: 'Colar' }, { role: 'selectAll', label: 'Selecionar tudo' }] },
     { label: 'Exibir', submenu: [{ role: 'resetZoom', label: 'Tamanho original' }, { role: 'zoomIn', label: 'Aumentar' }, { role: 'zoomOut', label: 'Diminuir' }, { type: 'separator' }, { role: 'togglefullscreen', label: 'Tela cheia' }] },
   ]));

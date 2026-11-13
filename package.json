@@ -1,7 +1,7 @@
 {
   "name": "datalingo",
-  "version": "1.1.0",
-  "description": "App estilo Duolingo para aprender SQL e Python para análise de dados",
+  "version": "1.2.0",
+  "description": "Datum: aprenda SQL, Python e estatística para análise de dados",
   "scripts": {
     "start": "npx --yes http-server -c-1 -p 8080 .",
     "validate": "node scripts/validate-content.mjs && python3 scripts/validate_python.py",
@@ -11,7 +11,9 @@
     "build:web": "node scripts/build-web.mjs",
     "dist:linux": "npm run fetch:pyodide && electron-builder --linux AppImage deb",
     "dist:win": "npm run fetch:pyodide && electron-builder --win nsis portable",
-    "android:sync": "npm run fetch:pyodide && npm run build:web && npx cap sync android"
+    "android:sync": "npm run fetch:pyodide && npm run build:web && npx cap sync android",
+    "build:sdk": "esbuild scripts/anthropic-sdk-entry.mjs --bundle --format=esm --platform=browser --minify --legal-comments=eof --outfile=vendor/anthropic-sdk.js",
+    "icons:build": "node scripts/render-icons.cjs"
   },
   "repository": {
     "type": "git",
@@ -32,16 +34,22 @@
   "type": "module",
   "private": true,
   "devDependencies": {
+    "@anthropic-ai/sdk": "^1.8.0",
     "@capacitor/cli": "^7.6.10",
+    "@fontsource-variable/inter": "^5.1.0",
+    "@fontsource-variable/jetbrains-mono": "^5.1.1",
+    "@fontsource-variable/space-grotesk": "^5.1.0",
     "electron": "^33.2.1",
     "electron-builder": "^25.1.8",
+    "esbuild": "^0.24.2",
+    "lucide-static": "^0.460.0",
     "sql.js": "^1.10.3"
   },
   "main": "desktop/main.cjs",
   "build": {
     "appId": "app.datalingo.desktop",
-    "productName": "DataLingo",
-    "copyright": "DataLingo",
+    "productName": "Datum",
+    "copyright": "Datum",
     "directories": {
       "output": "release",
       "buildResources": "assets"
@@ -72,12 +80,12 @@
       "perMachine": false,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "DataLingo",
+      "shortcutName": "Datum",
       "language": "1046",
-      "artifactName": "DataLingo-${version}-windows-instalador.${ext}"
+      "artifactName": "Datum-${version}-windows-instalador.${ext}"
     },
     "portable": {
-      "artifactName": "DataLingo-${version}-windows-portable.${ext}"
+      "artifactName": "Datum-${version}-windows-portable.${ext}"
     },
     "linux": {
       "target": [
@@ -86,9 +94,10 @@
       ],
       "icon": "assets/icon.png",
       "category": "Education",
-      "synopsis": "Aprenda SQL e Python para dados",
-      "maintainer": "DataLingo <datalingo@users.noreply.github.com>",
-      "artifactName": "DataLingo-${version}-linux-${arch}.${ext}"
+      "synopsis": "SQL, Python e estatística para dados",
+      "maintainer": "Datum <datum@users.noreply.github.com>",
+      "artifactName": "Datum-${version}-linux-${arch}.${ext}",
+      "executableName": "datum"
     },
     "deb": {
       "depends": [
