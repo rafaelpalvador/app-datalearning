@@ -107,3 +107,93 @@ export function syncNow({ force = false } = {}) {
   })().finally(() => { running = null; });
   return running;
 }
+
+// ───────────── Portfólio: as soluções do aluno publicadas num Gist (público ou secreto)
+import { COURSES } from './content/index.js';
+import { INTERVIEW } from './content/interview.js';
+
+const fence = (lang, code) => `~~~${lang}\n${code}\n~~~`;
+const clean = (t = '') => String(t).replace(/🐞\s*/g, '').trim();
+
+export function buildPortfolio() {
+  const s = store.getState();
+  const login = store.syncConfig().login || '';
+  const files = {};
+  const done = (c) => c.units.flatMap((u) => u.lessons).filter((l) => s.completed[l.id]).length;
+  const total = (c) => c.units.reduce((a, u) => a + u.lessons.length, 0);
+  const lv = store.levelInfo(s.xp);
+  const ivSolved = INTERVIEW.filter((p) => s.interview[p.id]);
+
+  // entrevistas, por linguagem
+  for (const lang of ['sql', 'python']) {
+    const probs = INTERVIEW.filter((p) => p.step.type === lang && s.solutions[`iv:${p.id}`]);
+    if (!probs.length) continue;
+    const body = probs.sort((a, b) => a.level - b.level).map((p) => {
+      const sol = s.solutions[`iv:${p.id}`];
+      const best = s.interview[p.id]?.bestSecs;
+      return [`## ${p.title}`, `Nível ${p.level}${best ? ` · resolvido em ${Math.floor(best / 60)} min ${best % 60} s` : ''}`, '', clean(p.step.prompt), '', fence(lang, sol.code)].join('\n');
+    });
+    files[`entrevistas-${lang}.md`] = `# Problemas de entrevista: ${lang === 'sql' ? 'SQL' : 'Python'}\n\n${body.join('\n\n---\n\n')}\n`;
+  }
+
+  // exercícios das trilhas
+  for (const c of COURSES) {
+    const parts = [];
+    for (const u of c.units) for (const l of u.lessons) {
+      const items = l.steps.filter((st) => ['sql', 'python'].includes(st.type) && s.solutions[`${l.id}#${st.uid}`]);
+      if (!items.length) continue;
+      parts.push(`## ${l.title}\n\n` + items.map((st) => `${clean(st.prompt)}\n\n${fence(st.type, s.solutions[`${l.id}#${st.uid}`].code)}`).join('\n\n'));
+    }
+    if (parts.length) files[`exercicios-${c.id === 'stats' ? 'estatistica' : c.id}.md`] = `# ${c.title}: minhas soluções\n\n${parts.join('\n\n---\n\n')}\n`;
+  }
+
+  const lines = [
+    `# Portfólio de dados${login ? ` · @${login}` : ''}`,
+    '',
+    `Soluções que escrevi estudando SQL, Python e estatística no Datum. Nível atual: **${lv.title}** (${s.xp} XP).`,
+    '',
+    '| trilha | lições concluídas |',
+    '|---|---|',
+    ...COURSES.map((c) => `| ${c.title} | ${done(c)} de ${total(c)} |`),
+    '',
+    `Problemas de entrevista resolvidos: **${ivSolved.length}** (SQL: ${ivSolved.filter((p) => p.step.type === 'sql').length}, Python: ${ivSolved.filter((p) => p.step.type === 'python').length}).`,
+    '',
+    '## Arquivos',
+    ...Object.keys(files).sort().map((f) => `- \`${f}\``),
+    '',
+    `_Atualizado em ${new Date().toLocaleDateString('pt-BR')}. Só entram respostas escritas por mim (sem ver a solução)._`,
+  ];
+  files['README.md'] = lines.join('\n') + '\n';
+  return files;
+}
+
+/** Cria ou atualiza o Gist do portfólio. Devolve a URL. */
+export async function publishPortfolio({ public: isPublic = true } = {}) {
+  const cfg = store.syncConfig();
+  if (!cfg.token) throw new SyncError('setup', 'Conecte o GitHub primeiro.');
+  const files = Object.fromEntries(Object.entries(buildPortfolio()).map(([k, v]) => [k, { content: v }]));
+  const pf = store.getState().portfolio;
+  let g = null;
+  if (pf.gistId) {
+    try {
+      // arquivos que não existem mais são removidos
+      const cur = await gh(`/gists/${pf.gistId}`, { token: cfg.token });
+      for (const name of Object.keys(cur.files || {})) if (!files[name]) files[name] = null;
+      if ((cur.public !== isPublic)) {
+        await gh(`/gists/${pf.gistId}`, { token: cfg.token, method: 'DELETE' });
+      } else {
+        g = await gh(`/gists/${pf.gistId}`, { token: cfg.token, method: 'PATCH', body: { files } });
+      }
+    } catch (e) {
+      if (e.code !== 'notfound') throw e;
+    }
+  }
+  if (!g) {
+    for (const k of Object.keys(files)) if (files[k] === null) delete files[k];
+    g = await gh('/gists', { token: cfg.token, method: 'POST', body: { description: 'Portfólio de dados: SQL, Python e estatística (feito com o Datum)', public: isPublic, files } });
+  }
+  store.setPortfolio({ gistId: g.id, url: g.html_url, public: isPublic });
+  // leva o endereço do portfólio para os outros aparelhos (para todos atualizarem o mesmo Gist)
+  await syncNow({ force: true }).catch(() => {});
+  return g.html_url;
+}

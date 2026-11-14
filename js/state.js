@@ -55,7 +55,10 @@ function defaults() {
     reminder: { enabled: false, hour: 19, minute: 0 },
     settings: { sound: true, haptics: true, theme: 'system' },
     tutor: { provider: '', keys: {}, models: {}, baseUrls: {} },
-    syncCfg: { token: '', gistId: '', login: '', lastSync: 0 }, // sincronização via GitHub (fica só no aparelho)
+    syncCfg: { token: '', gistId: '', login: '', lastSync: 0, syncPrefs: true }, // sincronização via GitHub (fica só no aparelho)
+    prefsAt: 0,        // quando as preferências mudaram (vale a mais recente entre aparelhos)
+    solutions: {},     // 'lessonId#uid' ou 'iv:problemId' -> { code, lang, at } (respostas certas, sem ver a solução)
+    portfolio: { gistId: '', url: '', public: true, at: 0 },
     syncBase: null,    // estado combinado na última sincronização (base da junção em 3 vias)
     totals: { correct: 0, answered: 0, perfectLessons: 0, maxCombo: 0, theoryRead: 0, tutorQuestions: 0 },
   };
@@ -87,6 +90,8 @@ export function getState() {
       settings: { ...d.settings, ...(saved.settings || {}) },
       tutor: migrateTutor({ ...d.tutor, ...(saved.tutor || {}) }),
       syncCfg: { ...d.syncCfg, ...(saved.syncCfg || {}) },
+      portfolio: { ...d.portfolio, ...(saved.portfolio || {}) },
+      solutions: saved.solutions || {},
       topics: saved.topics || {},
     };
     // limpeza de campos de versões anteriores (ofensiva, vidas, gemas)
@@ -240,6 +245,19 @@ export function migrateStepRefs(resolve) {
   return changed;
 }
 
+// ───────────── soluções do aluno (portfólio e sincronização)
+export function saveSolution(key, code, lang) {
+  if (!key || !code?.trim()) return;
+  getState().solutions[key] = { code: code.trim().slice(0, 20000), lang, at: Date.now() };
+  save();
+}
+
+export function setPortfolio(patch) {
+  const s = getState();
+  s.portfolio = { ...s.portfolio, ...patch, at: Date.now() };
+  save();
+}
+
 // ───────────── erros
 export function recordMistake(lessonId, stepIndex) {
   const s = getState();
@@ -284,6 +302,7 @@ export function unlockAchievement(id) {
 // ───────────── configurações
 export function setDailyGoal(xp) {
   getState().dailyGoal = xp;
+  getState().prefsAt = Date.now();
   save();
 }
 
@@ -295,11 +314,13 @@ export function setReminder(r) {
 
 export function setSetting(key, value) {
   getState().settings[key] = value;
+  getState().prefsAt = Date.now();
   save();
 }
 
 export function setTutorProvider(id) {
   getState().tutor.provider = id;
+  getState().prefsAt = Date.now();
   save();
 }
 
@@ -312,6 +333,7 @@ export function setTutorKey(id, key) {
 
 export function setTutorModel(id, model) {
   const t = getState().tutor;
+  getState().prefsAt = Date.now();
   if (model) t.models[id] = model.trim();
   else delete t.models[id];
   save();
@@ -381,11 +403,15 @@ export function importCode(code) {
 // ───────────── sincronização entre aparelhos (junção em 3 vias)
 // O que viaja entre aparelhos: o progresso. Ficam no aparelho: chaves de IA, token,
 // preferências (som, tema, lembrete) e a base da junção.
-const LOCAL_ONLY = ['tutor', 'syncCfg', 'syncBase', 'settings', 'reminder', 'demoSeeded'];
+const LOCAL_ONLY = ['tutor', 'syncCfg', 'syncBase', 'settings', 'reminder', 'demoSeeded', 'prefsAt', 'dailyGoal'];
 export function syncPayload() {
   const s = getState();
   const out = {};
   for (const [k, v] of Object.entries(s)) if (!LOCAL_ONLY.includes(k)) out[k] = v;
+  // preferências (opcional): tema, som, vibração, meta diária e a IA escolhida — nunca as chaves
+  if (s.syncCfg.syncPrefs !== false) {
+    out.prefs = { at: s.prefsAt || 0, settings: s.settings, dailyGoal: s.dailyGoal, tutorProvider: s.tutor.provider, tutorModels: s.tutor.models };
+  }
   return JSON.parse(JSON.stringify(out));
 }
 
@@ -493,7 +519,23 @@ export function mergeSynced(remote) {
     s.daily.maxCombo = Math.max(num(local.daily.maxCombo), num(remote.daily.maxCombo));
     s.daily.combo = num(local.daily.combo);
   }
-  if (typeof remote.dailyGoal === 'number' && !s.syncBase) s.dailyGoal = remote.dailyGoal;
+  // soluções: vale a mais recente de cada exercício
+  const solutions = { ...(remote.solutions || {}) };
+  for (const [k, v] of Object.entries(local.solutions || {})) if (!solutions[k] || (v.at || 0) >= (solutions[k].at || 0)) solutions[k] = v;
+  s.solutions = solutions;
+
+  // portfólio: o mesmo Gist em todos os aparelhos (vale a configuração mais recente)
+  if (remote.portfolio && (remote.portfolio.at || 0) > (s.portfolio.at || 0)) s.portfolio = { ...s.portfolio, ...remote.portfolio };
+
+  // preferências: vale a alteração mais recente (se a opção estiver ligada neste aparelho)
+  const rp = remote.prefs;
+  if (s.syncCfg.syncPrefs !== false && rp && (rp.at || 0) > (s.prefsAt || 0)) {
+    s.settings = { ...s.settings, ...(rp.settings || {}) };
+    if (typeof rp.dailyGoal === 'number') s.dailyGoal = rp.dailyGoal;
+    if (rp.tutorProvider !== undefined) s.tutor.provider = rp.tutorProvider;
+    if (rp.tutorModels) s.tutor.models = { ...s.tutor.models, ...rp.tutorModels };
+    s.prefsAt = rp.at;
+  } else if (typeof remote.dailyGoal === 'number' && !s.syncBase && !rp) s.dailyGoal = remote.dailyGoal;
 
   s.syncBase = syncPayload();
   save();

@@ -103,6 +103,13 @@ O progresso fica num Gist **secreto** da sua conta (`datum-progresso.json`) e é
 ao terminar cada lição. Lições concluídas, XP, revisão espaçada, erros, conquistas e entrevistas dos dois aparelhos são somados
 sem contar duas vezes. O token, as chaves das IAs e as preferências (som, tema, lembrete) ficam só em cada aparelho.
 
+**Preferências (1.9.0):** com a opção ligada, tema, som, vibração, meta diária e a IA escolhida no tutor também sincronizam
+(vale a alteração mais recente). As chaves das IAs continuam só em cada aparelho.
+
+**Portfólio no GitHub (1.9.0):** em **Perfil → Sincronizar → Portfólio no GitHub**, o Datum publica num Gist (público ou secreto)
+as soluções de SQL e Python que você escreveu sem ver a resposta, organizadas por trilha, mais os problemas de entrevista resolvidos.
+Use o mesmo botão para atualizar; os dois aparelhos atualizam o mesmo Gist.
+
 **Manual:** **Perfil → Backup manual → Exportar** num aparelho (o código é copiado) → envie para você mesmo →
 **Perfil → Backup manual → Importar** no outro.
 

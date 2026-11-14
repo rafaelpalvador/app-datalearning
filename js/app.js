@@ -749,6 +749,8 @@ function startSession({ title, items, mode, lessonId, unitId, interview, backHre
     const r = renderers[item.step.type](item.step);
     current = { step: item.step, renderer: r, feedback: '' };
     let attempts = 0;
+    let usedHelp = false;
+    if (r.solution) { const show = r.solution; r.solution = () => { usedHelp = true; show(); }; }
     put(body, h('div', { class: 'step-wrap' }, r.el));
     window.scrollTo(0, 0);
 
@@ -815,6 +817,11 @@ function startSession({ title, items, mode, lessonId, unitId, interview, backHre
           store.recordAnswer({ lessonId: item.lessonId, stepIndex: item.stepIndex, type: item.step.type, correct: true, review: ['review', 'srs'].includes(mode), courseId: item.courseId });
         }
         if (mode === 'review') store.clearMistake(item.lessonId, item.stepIndex);
+        // guarda a solução escrita pelo aluno (portfólio e sincronização), se ele não viu a resposta
+        if (r.getCode && ['sql', 'python'].includes(item.step.type) && !usedHelp) {
+          const key = item.lessonId ? `${item.lessonId}#${item.stepIndex}` : interview ? `iv:${interview.id}` : null;
+          store.saveSolution(key, r.getCode(), item.step.type);
+        }
         footer.className = 'session-footer good';
         put(feedback,
           h('div', { class: 'fb-title' }, ic('circleCheck', 20), pick(['Correto', 'Muito bem', 'Exato', 'Perfeito'])),
@@ -1593,6 +1600,7 @@ async function backgroundSync(force = false) {
   if (!sync.isConnected()) return;
   try {
     const { changed } = await sync.syncNow({ force });
+    if (changed) applyTheme();
     if (changed && !activeSession && !document.querySelector('.finish, .modal-backdrop')) route();
   } catch (e) {
     if (e.code === 'auth' || e.code === 'perm') toast(e.message, 'bad');
@@ -1660,8 +1668,46 @@ function syncCard() {
       viewProfile();
     },
   }, 'Desligar');
-  put(box, status, h('p', { class: 'small muted' }, 'Sincroniza ao abrir o app, ao voltar para ele e ao terminar cada lição.'), h('div', { class: 'row' }, now, off));
+  const prefs = h('input', { type: 'checkbox', checked: cfg.syncPrefs !== false, onchange: (e) => { store.getState().syncCfg.syncPrefs = e.target.checked; store.save(); backgroundSync(true); } });
+  put(box, status,
+    h('p', { class: 'small muted' }, 'Sincroniza ao abrir o app, ao voltar para ele e ao terminar cada lição.'),
+    h('label', { class: 'row small', style: { gap: '8px', alignItems: 'center' } }, prefs, 'Sincronizar também as preferências (tema, som, meta diária e a IA escolhida; as chaves das IAs nunca saem do aparelho)'),
+    h('div', { class: 'row' }, now, off),
+    portfolioBox());
   return card;
+}
+
+function portfolioBox() {
+  const s = store.getState();
+  const pf = s.portfolio;
+  const n = Object.keys(s.solutions).length;
+  const vis = h('select', { 'aria-label': 'Visibilidade do portfólio' },
+    h('option', { value: 'public', selected: pf.public !== false }, 'Público (aparece no seu perfil do GitHub)'),
+    h('option', { value: 'secret', selected: pf.public === false }, 'Secreto (só quem tiver o link)'));
+  const btn = h('button', {
+    class: 'btn primary sm',
+    disabled: !n,
+    onclick: async () => {
+      btn.disabled = true;
+      put(btn, 'Publicando...');
+      try {
+        const url = await sync.publishPortfolio({ public: vis.value === 'public' });
+        toast('Portfólio publicado');
+        viewProfile();
+        return url;
+      } catch (e) {
+        toast(e.message, 'bad');
+        btn.disabled = false;
+        put(btn, pf.gistId ? 'Atualizar portfólio' : 'Publicar portfólio');
+      }
+    },
+  }, ic('upload', 15), pf.gistId ? 'Atualizar portfólio' : 'Publicar portfólio');
+  return h('div', { class: 'stack', style: { gap: '8px', borderTop: '1px solid var(--line)', paddingTop: '12px' } },
+    h('strong', { class: 'small' }, 'Portfólio no GitHub'),
+    h('p', { class: 'small muted' }, n
+      ? `Publica ${n === 1 ? 'a solução' : `as ${n} soluções`} de SQL e Python que você escreveu (sem ver a resposta), organizadas por trilha, mais os problemas de entrevista resolvidos. Bom para mostrar em processos seletivos.`
+      : 'Resolva exercícios de SQL ou Python (sem ver a solução) e eles aparecem aqui para publicar. As soluções contam a partir desta versão.'),
+    h('div', { class: 'row' }, vis, btn, pf.url ? h('a', { class: 'btn ghost sm', href: pf.url, target: '_blank', rel: 'noopener' }, 'Abrir portfólio') : null));
 }
 
 // ─────────────────────────────────────────── ATUALIZAÇÕES (app de desktop)
