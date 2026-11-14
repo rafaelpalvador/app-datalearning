@@ -91,11 +91,20 @@ O Datum aparece no menu de aplicativos, em *Educação*.
 
 Para trocar de IA, volte ao Perfil e escolha outro provedor; as chaves de cada um ficam guardadas.
 
-## 🔄 Levar o progresso do celular para o PC
+## 🔄 Sincronizar celular e computador
 
-Não há servidor (ainda), então a sincronização é manual:
-**Perfil → Backup → Exportar** num aparelho (o código é copiado) → envie para você mesmo (WhatsApp, e-mail...) →
-**Perfil → Backup → Importar** no outro aparelho.
+**Automático (a partir da 1.8.0), pela sua conta do GitHub:**
+1. No navegador, abra https://github.com/settings/tokens/new?scopes=gist&description=Datum%20sincroniza%C3%A7%C3%A3o
+   (a permissão **gist** já vem marcada; é a única necessária). Escolha a validade e clique em **Generate token**. Copie o token.
+2. No Datum: **Perfil → Sincronizar celular e computador** → cole o token → **Conectar**.
+3. Faça o mesmo no outro aparelho, com o mesmo token.
+
+O progresso fica num Gist **secreto** da sua conta (`datum-progresso.json`) e é sincronizado ao abrir o app, ao voltar para ele e
+ao terminar cada lição. Lições concluídas, XP, revisão espaçada, erros, conquistas e entrevistas dos dois aparelhos são somados
+sem contar duas vezes. O token, as chaves das IAs e as preferências (som, tema, lembrete) ficam só em cada aparelho.
+
+**Manual:** **Perfil → Backup manual → Exportar** num aparelho (o código é copiado) → envie para você mesmo →
+**Perfil → Backup manual → Importar** no outro.
 
 ## 🛠️ Compilar você mesmo
 

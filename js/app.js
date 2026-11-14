@@ -10,6 +10,7 @@ import { dailyMissions, settleMissions, checkAchievements, ACHIEVEMENTS, MISSION
 import { askTutor, tutorMode, contextFromStep, isDemoRuntime, PROVIDERS, PROVIDER_ORDER, keyOf, modelOf, baseUrlOf, isConfigured, listModels, pickModel, testConnection, activeLabel, tutorConfig } from './tutor.js';
 import { icon } from './icons.js';
 import * as platform from './platform.js';
+import * as sync from './sync.js';
 
 export const APP_NAME = 'Datum';
 const app = document.getElementById('app');
@@ -916,6 +917,7 @@ function startSession({ title, items, mode, lessonId, unitId, interview, backHre
     feedbackFx('finish');
     const missions = settleMissions();
     const awards = checkAchievements();
+    backgroundSync(true);
     const lv = store.levelInfo(store.getState().xp);
 
     app.replaceChildren(h('div', { class: 'finish' }, h('div', { class: 'finish-card' },
@@ -1528,10 +1530,12 @@ function viewProfile() {
       })()),
       tutorSettings({ onDone: () => viewProfile() })),
 
+    syncCard(),
+
     updatesCard(),
 
     h('section', { class: 'card stack' },
-      h('div', { class: 'card-title', style: { marginBottom: 0 } }, h('h3', {}, 'Backup e sincronização')),
+      h('div', { class: 'card-title', style: { marginBottom: 0 } }, h('h3', {}, 'Backup manual (código)')),
       h('p', { class: 'small muted' }, 'Leve seu progresso do celular para o computador (ou o contrário): exporte o código num aparelho e importe no outro. As chaves das IAs não são incluídas.'),
       h('div', { class: 'row' },
         h('button', {
@@ -1575,6 +1579,89 @@ async function unlockAll() {
   if (!await askConfirm('Marcar todas as lições como concluídas (sem XP)? Útil para explorar o conteúdo.', { ok: 'Desbloquear' })) return;
   for (const c of COURSES) for (const l of allLessons(c)) if (!store.getState().completed[l.id]) store.completeLesson(l.id, 3, { silent: true });
   location.hash = '#/';
+}
+
+// ─────────────────────────────────────────── SINCRONIZAÇÃO ENTRE APARELHOS (GitHub)
+const timeAgo = (t) => {
+  if (!t) return 'nunca';
+  const m = Math.round((Date.now() - t) / 60000);
+  return m < 1 ? 'agora há pouco' : m < 60 ? `há ${m} min` : m < 1440 ? `há ${Math.round(m / 60)} h` : `há ${Math.round(m / 1440)} dia(s)`;
+};
+
+// Sincroniza em segundo plano; se o progresso mudou e o aluno não está numa lição, redesenha a tela.
+async function backgroundSync(force = false) {
+  if (!sync.isConnected()) return;
+  try {
+    const { changed } = await sync.syncNow({ force });
+    if (changed && !activeSession && !document.querySelector('.finish, .modal-backdrop')) route();
+  } catch (e) {
+    if (e.code === 'auth' || e.code === 'perm') toast(e.message, 'bad');
+  }
+}
+
+function syncCard() {
+  const cfg = store.syncConfig();
+  const box = h('div', { class: 'stack', style: { gap: '10px' } });
+  const card = h('section', { class: 'card stack', id: 'sincronizacao' },
+    h('div', { class: 'card-title', style: { marginBottom: 0 } }, h('h3', {}, 'Sincronizar celular e computador'),
+      h('span', { class: `badge ${cfg.token ? 'good' : ''}` }, cfg.token ? 'ligada' : 'desligada')),
+    box);
+
+  if (!cfg.token) {
+    const input = h('input', { type: 'password', placeholder: 'ghp_... ou github_pat_...', autocomplete: 'off', spellcheck: 'false', 'aria-label': 'Token do GitHub' });
+    const btn = h('button', {
+      class: 'btn primary sm',
+      onclick: async () => {
+        btn.disabled = true;
+        put(btn, 'Conectando...');
+        try {
+          await sync.connect(input.value);
+          toast('Sincronização ligada');
+          viewProfile();
+        } catch (e) {
+          toast(e.message, 'bad');
+          btn.disabled = false;
+          put(btn, 'Conectar');
+        }
+      },
+    }, 'Conectar');
+    put(box,
+      h('p', { class: 'small muted' }, 'O progresso fica num arquivo secreto da sua conta do GitHub e é atualizado sozinho nos aparelhos conectados. Não há servidor do Datum; o token fica só neste aparelho e não entra no backup.'),
+      h('ol', { class: 'small', style: { paddingLeft: '18px', display: 'grid', gap: '4px' } },
+        h('li', {}, 'Abra ', h('a', { href: sync.TOKEN_URL, target: '_blank', rel: 'noopener' }, 'github.com → criar token'), ' (já vem com a permissão "gist" marcada).'),
+        h('li', {}, 'Escolha a validade (pode ser "No expiration"), clique em ', h('b', {}, 'Generate token'), ' e copie.'),
+        h('li', {}, 'Cole abaixo e toque em Conectar. Repita no outro aparelho com o mesmo token.')),
+      h('div', { class: 'row' }, input, btn));
+    return card;
+  }
+
+  const status = h('span', { class: 'small muted' }, `Conectado como @${cfg.login} · última sincronização: ${timeAgo(cfg.lastSync)}`);
+  const now = h('button', {
+    class: 'btn sm',
+    onclick: async () => {
+      now.disabled = true;
+      put(status, 'Sincronizando...');
+      try {
+        const { changed } = await sync.syncNow({ force: true });
+        toast(changed ? 'Progresso atualizado com o outro aparelho' : 'Tudo sincronizado');
+        viewProfile();
+      } catch (e) {
+        toast(e.message, 'bad');
+        now.disabled = false;
+        put(status, e.message);
+      }
+    },
+  }, ic('repeat', 15), 'Sincronizar agora');
+  const off = h('button', {
+    class: 'btn ghost sm',
+    onclick: async () => {
+      if (!await askConfirm('Desligar a sincronização neste aparelho? O progresso continua salvo aqui e no GitHub.', { ok: 'Desligar' })) return;
+      sync.disconnect();
+      viewProfile();
+    },
+  }, 'Desligar');
+  put(box, status, h('p', { class: 'small muted' }, 'Sincroniza ao abrir o app, ao voltar para ele e ao terminar cada lição.'), h('div', { class: 'row' }, now, off));
+  return card;
 }
 
 // ─────────────────────────────────────────── ATUALIZAÇÕES (app de desktop)
@@ -1705,6 +1792,8 @@ if (IS_DEMO && !store.getState().demoSeeded) {
 // (e cartões que apontavam para cards de teoria, por causa da mudança de posição, saem da fila).
 store.migrateStepRefs(migrateRef);
 setupDesktopUpdates();
+backgroundSync(true);
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible') backgroundSync(); });
 
 window.addEventListener('hashchange', route);
 route();

@@ -55,6 +55,8 @@ function defaults() {
     reminder: { enabled: false, hour: 19, minute: 0 },
     settings: { sound: true, haptics: true, theme: 'system' },
     tutor: { provider: '', keys: {}, models: {}, baseUrls: {} },
+    syncCfg: { token: '', gistId: '', login: '', lastSync: 0 }, // sincronização via GitHub (fica só no aparelho)
+    syncBase: null,    // estado combinado na última sincronização (base da junção em 3 vias)
     totals: { correct: 0, answered: 0, perfectLessons: 0, maxCombo: 0, theoryRead: 0, tutorQuestions: 0 },
   };
 }
@@ -84,6 +86,7 @@ export function getState() {
       reminder: { ...d.reminder, ...(saved.reminder || {}) },
       settings: { ...d.settings, ...(saved.settings || {}) },
       tutor: migrateTutor({ ...d.tutor, ...(saved.tutor || {}) }),
+      syncCfg: { ...d.syncCfg, ...(saved.syncCfg || {}) },
       topics: saved.topics || {},
     };
     // limpeza de campos de versões anteriores (ofensiva, vidas, gemas)
@@ -184,6 +187,7 @@ function srsUpdate(key, correct) {
     c.ease = Math.max(1.3, c.ease - 0.2);
   }
   c.due = Date.now() + c.interval * DAY;
+  c.at = Date.now(); // quando foi respondido (desempate na sincronização)
   state.srs[key] = c;
 }
 
@@ -357,7 +361,7 @@ export function resetProgress() {
 
 // ───────────── backup / sincronização manual entre aparelhos
 export function exportCode() {
-  const { tutor, ...rest } = getState(); // as chaves de API nunca saem do aparelho
+  const { tutor, syncCfg, syncBase, ...rest } = getState(); // chaves e token nunca saem do aparelho
   return 'DL1:' + btoa(unescape(encodeURIComponent(JSON.stringify(rest))));
 }
 
@@ -367,7 +371,131 @@ export function importCode(code) {
   const data = JSON.parse(decodeURIComponent(escape(atob(raw.slice(4)))));
   if (typeof data !== 'object' || data === null || typeof data.xp !== 'number') throw new Error('Código inválido.');
   data.tutor = getState().tutor;
+  data.syncCfg = getState().syncCfg;
+  data.syncBase = null;
   localStorage.setItem(KEY, JSON.stringify(data));
   state = null;
   return getState();
+}
+
+// ───────────── sincronização entre aparelhos (junção em 3 vias)
+// O que viaja entre aparelhos: o progresso. Ficam no aparelho: chaves de IA, token,
+// preferências (som, tema, lembrete) e a base da junção.
+const LOCAL_ONLY = ['tutor', 'syncCfg', 'syncBase', 'settings', 'reminder', 'demoSeeded'];
+export function syncPayload() {
+  const s = getState();
+  const out = {};
+  for (const [k, v] of Object.entries(s)) if (!LOCAL_ONLY.includes(k)) out[k] = v;
+  return JSON.parse(JSON.stringify(out));
+}
+
+export const syncConfig = () => getState().syncCfg;
+export function setSyncConfig(patch) {
+  const s = getState();
+  s.syncCfg = { ...s.syncCfg, ...patch };
+  if (!s.syncCfg.token) { s.syncCfg = { token: '', gistId: '', login: '', lastSync: 0 }; s.syncBase = null; }
+  save();
+}
+
+const num = (v) => (typeof v === 'number' && isFinite(v) ? v : 0);
+// contador que os dois aparelhos podem ter aumentado desde a última sincronização
+const counter = (base, a, b) => num(base) + Math.max(0, num(a) - num(base)) + Math.max(0, num(b) - num(base));
+function mergeCounters(base = {}, a = {}, b = {}) {
+  const out = {};
+  for (const k of new Set([...Object.keys(a), ...Object.keys(b)])) {
+    const va = a[k], vb = b[k];
+    if (typeof va === 'number' || typeof vb === 'number') out[k] = counter(base[k], va, vb);
+    else if ((va && typeof va === 'object') || (vb && typeof vb === 'object')) out[k] = mergeCounters(base[k] || {}, va || {}, vb || {});
+  }
+  return out;
+}
+function minTree(a, b) {
+  if (typeof a === 'number' && typeof b === 'number') return Math.min(a, b);
+  if (typeof a === 'number' || typeof b === 'number') return 0;
+  if (!a || !b || typeof a !== 'object' || typeof b !== 'object' || Array.isArray(a)) return Array.isArray(a) ? [] : {};
+  const out = {};
+  for (const k of Object.keys(a)) if (k in b) out[k] = minTree(a[k], b[k]);
+  return out;
+}
+// lista em que itens podem ter sido adicionados ou removidos dos dois lados
+function mergeSet(base = [], a = [], b = [], keyOf) {
+  const kb = new Set(base.map(keyOf)), ka = new Set(a.map(keyOf)), kr = new Set(b.map(keyOf));
+  const out = new Map();
+  for (const item of [...b, ...a]) {
+    const k = keyOf(item);
+    const removed = (kb.has(k) && !ka.has(k)) || (kb.has(k) && !kr.has(k));
+    if (!removed) out.set(k, item);
+  }
+  return [...out.values()];
+}
+
+/**
+ * Junta o progresso de outro aparelho (remote) com o deste, usando a última versão
+ * sincronizada como base: contadores somam o que cada lado ganhou, lições concluídas,
+ * conquistas e entrevistas se unem, e a revisão espaçada fica com a resposta mais recente.
+ * Devolve true se o estado local mudou.
+ */
+export function mergeSynced(remote) {
+  const s = getState();
+  const before = JSON.stringify(syncPayload());
+  const local = syncPayload();
+  if (!remote || typeof remote !== 'object') remote = {};
+  // 1ª sincronização: não se sabe o que já era comum aos dois aparelhos (ex.: progresso
+  // importado por código de backup). Usar o menor valor de cada contador como base faz o
+  // resultado ser o MAIOR dos dois, sem somar duas vezes o mesmo progresso.
+  const base = s.syncBase || minTree(local, remote);
+
+  s.xp = counter(base.xp, local.xp, remote.xp);
+  s.history = mergeCounters(base.history, local.history, remote.history);
+  s.totals = { ...s.totals, ...mergeCounters(base.totals, local.totals, remote.totals) };
+  for (const k of ['maxCombo']) s.totals[k] = Math.max(num(local.totals?.[k]), num(remote.totals?.[k]));
+  s.topics = mergeCounters(base.topics, local.topics, remote.topics);
+
+  const completed = { ...(remote.completed || {}) };
+  for (const [id, c] of Object.entries(local.completed || {})) {
+    const r = completed[id];
+    completed[id] = r ? { at: Math.min(c.at ?? Infinity, r.at ?? Infinity), stars: Math.max(c.stars || 0, r.stars || 0), bestMistakes: Math.min(c.bestMistakes ?? Infinity, r.bestMistakes ?? Infinity) } : c;
+  }
+  s.completed = completed;
+
+  const checkpoints = { ...(remote.checkpoints || {}) };
+  for (const [id, c] of Object.entries(local.checkpoints || {})) {
+    const r = checkpoints[id];
+    checkpoints[id] = r ? { at: Math.min(c.at, r.at), score: Math.max(c.score || 0, r.score || 0) } : c;
+  }
+  s.checkpoints = checkpoints;
+
+  const interview = { ...(remote.interview || {}) };
+  for (const [id, c] of Object.entries(local.interview || {})) {
+    const r = interview[id];
+    interview[id] = r ? { solvedAt: Math.min(c.solvedAt ?? Infinity, r.solvedAt ?? Infinity), bestSecs: Math.min(c.bestSecs ?? Infinity, r.bestSecs ?? Infinity) } : c;
+  }
+  s.interview = interview;
+
+  const achievements = { ...(remote.achievements || {}) };
+  for (const [id, t] of Object.entries(local.achievements || {})) achievements[id] = Math.min(t, achievements[id] ?? Infinity);
+  s.achievements = achievements;
+
+  // revisão espaçada: vale a resposta mais recente de cada exercício
+  const stamp = (c) => c?.at ?? (c ? c.due - (c.interval || 0) * DAY : -1);
+  const srs = { ...(remote.srs || {}) };
+  for (const [k, c] of Object.entries(local.srs || {})) if (!srs[k] || stamp(c) >= stamp(srs[k])) srs[k] = c;
+  s.srs = srs;
+
+  const mk = (m) => `${m.lessonId}#${m.stepIndex}`;
+  s.mistakes = mergeSet(base.mistakes, local.mistakes || [], remote.mistakes || [], mk).sort((x, y) => (x.at || 0) - (y.at || 0)).slice(-200);
+
+  // missões do dia: só se os dois aparelhos estão no mesmo dia
+  if (remote.daily?.day === s.daily.day) {
+    const bd = !s.syncBase ? minTree(local.daily, remote.daily) : (base.daily?.day === s.daily.day ? base.daily : {});
+    const merged = mergeCounters(bd, local.daily, remote.daily);
+    s.daily = { ...s.daily, ...merged, day: s.daily.day, claimed: [...new Set([...(local.daily.claimed || []), ...(remote.daily.claimed || [])])] };
+    s.daily.maxCombo = Math.max(num(local.daily.maxCombo), num(remote.daily.maxCombo));
+    s.daily.combo = num(local.daily.combo);
+  }
+  if (typeof remote.dailyGoal === 'number' && !s.syncBase) s.dailyGoal = remote.dailyGoal;
+
+  s.syncBase = syncPayload();
+  save();
+  return JSON.stringify(syncPayload()) !== before;
 }

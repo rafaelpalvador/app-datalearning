@@ -1,6 +1,6 @@
 {
   "name": "datalingo",
-  "version": "1.7.1",
+  "version": "1.8.0",
   "description": "Datum: aprenda SQL, Python e estatística para análise de dados",
   "scripts": {
     "start": "npx --yes http-server -c-1 -p 8080 .",
