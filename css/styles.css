@@ -19,6 +19,8 @@
   --brand-soft: #e3f3f1;
   --xp: #a16207;
   --good: #15803d;
+  --on-good: #ffffff;
+  --on-bad: #ffffff;
   --good-bg: #e9f6ee;
   --bad: #c62828;
   --bad-bg: #fbecec;
@@ -64,6 +66,8 @@
     --brand-soft: #0f2a28;
     --xp: #e3b341;
     --good: #4ade80;
+    --on-good: #0b0d10;
+    --on-bad: #0b0d10;
     --good-bg: #0f2418;
     --bad: #f87171;
     --bad-bg: #2a1215;
@@ -97,6 +101,8 @@
   --brand-soft: #0f2a28;
   --xp: #e3b341;
   --good: #4ade80;
+  --on-good: #0b0d10;
+  --on-bad: #0b0d10;
   --good-bg: #0f2418;
   --bad: #f87171;
   --bad-bg: #2a1215;
@@ -182,16 +188,22 @@ code { font-family: var(--mono); font-size: 0.86em; background: var(--surface-2)
 
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; font-weight: 600; font-size: 0.92rem; border-radius: 10px; padding: 10px 18px; border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink); cursor: pointer; transition: background 0.15s, border-color 0.15s, transform 0.05s; white-space: nowrap; }
 .btn:hover:not(:disabled) { background: var(--surface-2); }
+/* No celular o :hover fica "preso" depois do toque: só aplica onde existe mouse */
+@media (hover: none) { .btn:hover:not(:disabled) { background: var(--surface); } .btn.ghost:hover:not(:disabled) { background: transparent; } }
 .btn:active:not(:disabled) { transform: translateY(1px); }
 .btn.primary { background: var(--ink); border-color: var(--ink); color: var(--on-ink); }
 .btn.primary:hover:not(:disabled) { background: var(--ink); opacity: 0.9; }
-.btn.primary:disabled { background: var(--surface-3); border-color: var(--surface-3); color: var(--ink-3); cursor: not-allowed; }
+.btn.primary:disabled { background: var(--surface-3); border-color: var(--surface-3); color: var(--ink-2); cursor: not-allowed; opacity: 1; }
 .btn.ghost { border-color: transparent; background: transparent; color: var(--ink-2); }
 .btn.ghost:hover:not(:disabled) { background: var(--surface-2); color: var(--ink); }
 .btn.danger { color: var(--bad); }
-.btn.danger-solid { background: var(--bad); border-color: var(--bad); color: #fff; }
-.btn.good-solid { background: var(--good); border-color: var(--good); color: var(--on-ink); }
-.btn.bad-solid { background: var(--bad); border-color: var(--bad); color: #fff; }
+.btn.danger-solid, .btn.danger-solid:hover:not(:disabled) { background: var(--bad); border-color: var(--bad); color: var(--on-bad); }
+.btn.good-solid, .btn.good-solid:hover:not(:disabled) { background: var(--good); border-color: var(--good); color: var(--on-good); }
+.btn.bad-solid, .btn.bad-solid:hover:not(:disabled) { background: var(--bad); border-color: var(--bad); color: var(--on-bad); }
+.btn.primary:hover:not(:disabled) { color: var(--on-ink); }
+@media (hover: hover) { .btn.good-solid:hover:not(:disabled), .btn.bad-solid:hover:not(:disabled), .btn.danger-solid:hover:not(:disabled) { filter: brightness(0.94); } }
+/* troca de estado (Verificar → Continuar) sem animar a cor, para não passar por um tom ilegível */
+.footer-actions .btn { transition: transform 0.05s; }
 .btn.sm { padding: 6px 12px; font-size: 0.85rem; border-radius: 8px; }
 .btn:disabled { opacity: 0.55; cursor: not-allowed; }
 .icon-btn { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 10px; border: 1px solid transparent; background: transparent; color: var(--ink-2); cursor: pointer; }
