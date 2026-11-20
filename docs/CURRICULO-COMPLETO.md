@@ -55,6 +55,7 @@ resolvidos executáveis; nenhum exercício cobra um comando, função ou conceit
 - Bayesiana e verossimilhança: prior, posterior, Beta-Binomial, intervalos de credibilidade, perda esperada, shrinkage, máxima verossimilhança, AIC, Monte Carlo
 - Causalidade: confundidores, DAGs, colisores, diferença em diferenças, escore de propensão, regressão descontínua, variáveis instrumentais, controle sintético
 - Negócio: sobrevivência (Kaplan-Meier), coortes, retenção, churn, LTV, CAC, controle estatístico de processo (gráficos p e c, regras de Western Electric)
+- Prática profissional (v2.1): método das 4 perguntas (problema, premissas, código e validação, tradução para o negócio), média ponderada, média aparada, MAD e z robusto, KDE e regra de Silverman, Freedman-Diaconis, violino, outliers com critério de negócio, MCAR/MAR/MNAR, imputação por grupo com indicador, duplicatas, vazamento de dados, regressão à média, probabilidade total, Bayes sequencial, Log-Normal, Pareto, curva de Lorenz e Gini, simulador de Monte Carlo (Poisson × Binomial × Log-Normal, P10/P50/P90, VaR, CVaR, sensibilidade), Holm, Tukey/Games-Howell/Dunn/Dunnett, qui-quadrado de aderência por simulação, desenho de experimento (métrica principal, guardas, unidade de randomização, novidade e primazia, regra de decisão), V de Cramér, Kendall, η², elasticidade log-log, interações, Breusch-Pagan, erros robustos HC3, distância de Cook, GLMs (Poisson, binomial negativa, Gama, IRLS, superdispersão), AIC/BIC, ElasticNet, ADF, PACF, Holt-Winters, SARIMA/SARIMAX, Prophet, walk-forward, MAE/RMSE/MAPE/sMAPE/MASE, calibração, resultados potenciais (Rubin), ATE/ATT, DAGs (confundidor, mediador, colisor), IPW e balanceamento, modelos hierárquicos e Bayes empírico, MCMC (Metropolis, R̂, ESS), regressão de Cox e riscos proporcionais, análise fatorial, GMM com EM, DiD com erros agrupados e placebo, ROI causal
 
 ### Bancos de Dados com PostgreSQL
 Referências: documentação oficial do PostgreSQL 18 e notas do 19, *The Data Warehouse Toolkit* (Kimball), *Designing Data-Intensive Applications* (Kleppmann), documentação do PgBouncer, pgvector, Redis, Cassandra e MongoDB.
@@ -118,36 +119,44 @@ Referências: documentação oficial do PostgreSQL 18 e notas do 19, *The Data W
 
 ### Estatística para Dados
 
+Estrutura em 5 níveis (currículo profissional: do zero a analista sênior, cientista de dados ou analytics engineer). Lições marcadas com ★ entraram na versão 2.1.
 
-**Nível Básico**
+**Nível 1 · Descritiva** — Ler, limpar e resumir dados sem distorções: medidas robustas, gráficos, outliers, faltantes e armadilhas
 
-- **Primeiros conceitos**: Dados, variáveis e escalas · Tabelas de frequência e histogramas · Amostragem e desenho de estudos
-- **Estatística descritiva**: Média, mediana e moda · Dispersão: variância e desvio padrão · Quartis, boxplot e outliers · Forma da distribuição: assimetria, curtose e transformações
-- **Probabilidade e distribuições**: Regras da probabilidade e contagem · Probabilidade na prática · Variáveis aleatórias, valor esperado e variância · Distribuição normal e z-score · Distribuição binomial · Poisson, geométrica, exponencial e uniforme · Lei dos grandes números e Teorema Central do Limite
+- **Primeiros conceitos**: ★ Como um estatístico de dados pensa · Dados, variáveis e escalas · Tabelas de frequência e histogramas
+- **Estatística descritiva**: Média, mediana e moda · ★ Média ponderada, coeficiente de variação e medidas robustas · Dispersão: variância e desvio padrão · Quartis, boxplot e outliers · Forma da distribuição: assimetria, curtose e transformações
+- **Visualização, qualidade dos dados e armadilhas**: ★ Visualização estatística: histograma, densidade, boxplot, violino e dispersão · ★ Outliers com critério técnico e de negócio · ★ Dados faltantes (MCAR, MAR, MNAR), duplicatas e vazamento · ★ Armadilhas analíticas: Simpson, sobrevivência e taxa base · ★ Projeto: diagnóstico executivo de uma base de faturamento B2B
 
-**Nível Intermediário**
+**Nível 2 · Probabilidade** — Probabilidade, Bayes, distribuições (inclusive caudas longas), TLC, amostragem e Monte Carlo
+
+- **Probabilidade e distribuições**: Regras da probabilidade e contagem · Probabilidade na prática · ★ Probabilidade total e Bayes nas decisões de negócio · Variáveis aleatórias, valor esperado e variância · Distribuição normal e z-score · Distribuição binomial · Poisson, geométrica, exponencial e uniforme · ★ Log-Normal, Pareto e a regra 80/20 · Lei dos grandes números e Teorema Central do Limite
+- **Amostragem e simulação**: Amostragem e desenho de estudos · Simulação de Monte Carlo · ★ Projeto: simulador de Monte Carlo da receita trimestral
+
+**Nível 3 · Inferência e A/B** — Intervalos, testes de hipótese, não paramétricos, poder, CUPED e testes A/B em produção
 
 - **Amostragem e intervalos de confiança**: Erro padrão e IC da média · IC de proporções e bootstrap · Estimadores e a distribuição t
 - **Testes de hipótese e testes A/B**: Hipóteses e p-valor · Teste A/B de conversão · t-test e cuidados com testes · Testes t de uma amostra e pareado, e tamanho de efeito
-- **Correlação e regressão**: Correlação · Regressão linear · Diagnóstico da regressão
-- **Testes para categorias e vários grupos**: Qui-quadrado de independência · ANOVA: comparando várias médias
-
-**Nível Avançado**
-
-- **Séries temporais e análise aplicada**: Sazonalidade e tendência · Detecção de anomalias · Autocorrelação e previsão de base · Estacionariedade, suavização exponencial e ARIMA
+- **Testes para categorias e vários grupos**: Qui-quadrado de independência · ANOVA: comparando várias médias · ★ Depois da ANOVA: post hoc, e o qui-quadrado de aderência
 - **Não paramétricos e comparações múltiplas**: Testes de permutação e Mann-Whitney · Muitos testes ao mesmo tempo · Wilcoxon pareado, Kruskal-Wallis e teste exato de Fisher
-- **Regressão avançada**: Regressão múltipla e dummies · Regressão logística
 - **Poder, tamanho de amostra e CUPED**: Poder estatístico e MDE · Redução de variância com CUPED
-- **Modelagem preditiva**: Viés-variância, overfitting e validação cruzada · Métricas de classificação · Regularização: ridge e lasso
-- **Aprendizado não supervisionado**: PCA: redução de dimensionalidade · Clustering: k-means e segmentação
+- **Experimentação em produção**: Espiar resultados, SRM e testes sequenciais · ★ Experimentação profissional: métricas, unidade, novidade e decisões · ★ Projeto: framework completo de teste A/B do checkout
 
-**Nível Especialista**
+**Nível 4 · Modelagem** — Correlação, regressão e diagnóstico, logística, GLMs, seleção de modelos e previsão de séries
 
-- **Inferência bayesiana**: Raciocínio bayesiano e Beta-Binomial · Credibilidade, perda esperada e shrinkage
-- **Verossimilhança e simulação**: Máxima verossimilhança · Simulação de Monte Carlo
-- **Inferência causal**: Confundimento e diferença em diferenças · Escore de propensão e estratificação · Regressão descontínua, variáveis instrumentais e controle sintético
-- **Experimentação avançada**: Espiar resultados, SRM e testes sequenciais · Bandits e Thompson Sampling · Análise de sobrevivência
+- **Correlação e regressão**: Correlação · ★ Associação entre categorias (V de Cramér) e correlação de postos · Regressão linear · Diagnóstico da regressão
+- **Regressão avançada e GLMs**: Regressão múltipla e dummies · ★ Interações, transformações log e elasticidade; heterocedasticidade e influência · Regressão logística · ★ Modelos lineares generalizados: Poisson, binomial negativa e Gama
+- **Modelagem preditiva**: Viés-variância, overfitting e validação cruzada · ★ Seleção de modelos: AIC, BIC e ElasticNet · Métricas de classificação · Regularização: ridge e lasso
+- **Séries temporais e previsão**: Sazonalidade e tendência · Detecção de anomalias · Autocorrelação e previsão de base · Estacionariedade, suavização exponencial e ARIMA · ★ Previsão: Holt-Winters, SARIMA/SARIMAX e Prophet · ★ Validação no tempo (walk-forward) e métricas de previsão
+- **Projeto de modelagem**: ★ Projeto: drivers de conversão B2B e previsão de receita de 6 meses
+
+**Nível 5 · Sênior** — Inferência causal, bayesiana hierárquica, sobrevivência (Cox), multivariada e métricas de negócio
+
+- **Inferência causal**: ★ Resultados potenciais, DAGs e ponderação pelo inverso da propensão (IPW) · Confundimento e diferença em diferenças · Escore de propensão e estratificação · Regressão descontínua, variáveis instrumentais e controle sintético
+- **Verossimilhança e inferência bayesiana**: Máxima verossimilhança · Raciocínio bayesiano e Beta-Binomial · Credibilidade, perda esperada e shrinkage · ★ Modelos hierárquicos e MCMC: aprender com lojas antigas para lojas novas
+- **Sobrevivência e decisões sequenciais**: Análise de sobrevivência · ★ Regressão de Cox: o que acelera o churn · Bandits e Thompson Sampling
+- **Estatística multivariada**: PCA: redução de dimensionalidade · ★ Análise fatorial e misturas gaussianas (GMM) × k-means · Clustering: k-means e segmentação
 - **Métricas de produto e negócio**: Métricas de razão e o método delta · Coortes, retenção, churn e LTV · Controle estatístico de processo
+- **Capstone sênior**: ★ Capstone sênior: ROI causal de uma campanha e risco de churn
 
 ### Bancos de Dados com PostgreSQL
 

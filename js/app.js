@@ -1,4 +1,4 @@
-import { COURSES, findLesson, allLessons, TRACK_LEVELS, LEVEL_DESC, stepByRef, migrateRef } from './content/index.js';
+import { COURSES, findLesson, allLessons, TRACK_LEVELS, LEVEL_DESC, levelName, stepByRef, migrateRef } from './content/index.js';
 import { INTERVIEW, INTERVIEW_SQL, INTERVIEW_PY, LEVELS } from './content/interview.js';
 import { SCHEMA_DOC } from './content/datasets.js';
 import { PG_SCHEMA_DOC } from './content/pg-dataset.js';
@@ -133,7 +133,9 @@ function lessonUnlocked(course, lessonId) {
   const s = store.getState();
   const list = allLessons(course);
   const idx = list.findIndex((l) => l.id === lessonId);
-  return idx === 0 || !!s.completed[list[idx - 1]?.id] || !!s.completed[lessonId];
+  // Também libera lições que ficaram "para trás" quando a trilha ganhou lições novas no meio:
+  // se o aluno já concluiu alguma lição adiante, nada antes dela fica bloqueado.
+  return idx === 0 || !!s.completed[list[idx - 1]?.id] || !!s.completed[lessonId] || list.slice(idx + 1).some((l) => s.completed[l.id]);
 }
 
 function courseProgress(course) {
@@ -398,7 +400,7 @@ function viewCourse(courseId) {
       return h('section', { class: 'level-section', style: { '--track': trackVar(course.id) } },
         h('div', { class: 'level-title' },
           h('span', { class: 'level-badge' }, `Nível ${lv.id}`),
-          h('div', { style: { minWidth: '0' } }, h('h2', {}, lv.name), h('p', { class: 'small muted' }, LEVEL_DESC[course.id][lv.id])),
+          h('div', { style: { minWidth: '0' } }, h('h2', {}, levelName(course.id, lv.id)), h('p', { class: 'small muted' }, LEVEL_DESC[course.id][lv.id])),
           h('div', { class: 'level-prog' }, h('span', { class: 'small faint num' }, `${done}/${lessons.length}`), h('div', { class: 'progress' }, h('div', { class: 'bar', style: { width: `${pct(done, lessons.length)}%` } })))),
         units.map(({ u, ui }) => unitCard(u, ui)));
     }),

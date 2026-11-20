@@ -8,6 +8,7 @@ import { STATS_THEORY } from './theory-stats.js';
 import { SQL_PLUS } from './sql-plus.js';
 import { PY_PLUS } from './py-plus.js';
 import { STATS_PLUS } from './stats-plus.js';
+import { organizarEstatistica } from './stats/organizar.js';
 
 export const COURSES = [SQL_COURSE, PYTHON_COURSE, STATS_COURSE, DB_COURSE];
 
@@ -33,6 +34,9 @@ for (const course of COURSES) {
     else unit.lessons.push(lesson);
   }
 }
+// Estatística: estrutura final em 5 níveis, com as lições profissionais (js/content/stats/)
+organizarEstatistica(STATS_COURSE);
+
 const mergeMaps = (...maps) => {
   const out = {};
   for (const m of maps) for (const [k, v] of Object.entries(m || {})) out[k] = [...(out[k] || []), ...v];
@@ -82,14 +86,21 @@ export const TRACK_LEVELS = [
   { id: 2, name: 'Intermediário' },
   { id: 3, name: 'Avançado' },
   { id: 4, name: 'Especialista' },
-  { id: 5, name: 'Arquitetura' },   // só a trilha de Bancos de Dados tem o 5º nível
+  { id: 5, name: 'Sênior' },
 ];
+
+// Nomes de nível próprios de cada trilha (quando diferem do padrão acima)
+const LEVEL_NAMES = {
+  db: { 1: 'Fundamentos', 2: 'SQL profissional', 3: 'Avançado', 4: 'Especialista', 5: 'Arquitetura' },
+  stats: { 1: 'Descritiva', 2: 'Probabilidade', 3: 'Inferência e A/B', 4: 'Modelagem', 5: 'Sênior' },
+};
+export const levelName = (courseId, levelId) => LEVEL_NAMES[courseId]?.[levelId] || TRACK_LEVELS.find((l) => l.id === levelId)?.name || `Nível ${levelId}`;
 
 export const LEVEL_DESC = {
   sql: { 1: 'SELECT, filtros e agregações', 2: 'JOINs, subqueries e CTEs', 3: 'Window functions, datas, modelagem e transações', 4: 'Performance, análises de negócio e padrões de engenharia de dados' },
   python: { 1: 'Python essencial e NumPy', 2: 'pandas: seleção, agregação, junção e limpeza', 3: 'Séries temporais, visualização, extração de dados e estatística', 4: 'Desempenho, dados maiores que a memória e código de produção' },
   db: { 1: 'SGBD, ACID, modelagem, chaves, tipos, normalização e integridade', 2: 'SQL profissional: DML, junções, agregações avançadas, tratamento de dados e JSONB', 3: 'CTEs, window functions, objetos programáveis, MVCC, isolamento e locks', 4: 'Internals, índices, EXPLAIN, particionamento, backup, replicação e segurança', 5: 'OLAP, modelagem dimensional, NoSQL, vetores, cloud e migrations' },
-  stats: { 1: 'Conceitos, estatística descritiva e probabilidade', 2: 'Intervalos de confiança, testes A/B, regressão e ANOVA', 3: 'Séries temporais, não paramétricos, regressão avançada e poder', 4: 'Bayesiana, verossimilhança, inferência causal e experimentação avançada' },
+  stats: { 1: 'Ler, limpar e resumir dados sem distorções: medidas robustas, gráficos, outliers, faltantes e armadilhas', 2: 'Probabilidade, Bayes, distribuições (inclusive caudas longas), TLC, amostragem e Monte Carlo', 3: 'Intervalos, testes de hipótese, não paramétricos, poder, CUPED e testes A/B em produção', 4: 'Correlação, regressão e diagnóstico, logística, GLMs, seleção de modelos e previsão de séries', 5: 'Inferência causal, bayesiana hierárquica, sobrevivência (Cox), multivariada e métricas de negócio' },
 };
 
 export const levelOfLesson = (lessonId) => {
