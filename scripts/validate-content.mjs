@@ -30,7 +30,7 @@ for (const course of COURSES) {
             break;
           case 'example':
             if (!step.title || !step.code) errors.push(`${where}: exemplo sem título/código`);
-            if (step.lang === 'sql') {
+            if (step.lang === 'pg') { /* validado em validate-pg.mjs */ } else if (step.lang === 'sql') {
               const db = createDb(SQL);
               try { const r = db.exec(step.code); if (!r.length || !r[r.length - 1].values.length) errors.push(`${where}: exemplo SQL sem resultado`); }
               catch (e) { errors.push(`${where}: exemplo SQL com erro: ${e.message}`); }
@@ -52,6 +52,7 @@ for (const course of COURSES) {
             break;
           }
           case 'sql':
+            if (step.engine === 'pg') { counts.pg = (counts.pg || 0) + 1; break; } // validado em validate-pg.mjs
             checkSql(step, where);
             (step.variants || []).forEach((v, k) => checkSql({ ...step, ...v }, `${where} variação ${k + 1}`));
             break;

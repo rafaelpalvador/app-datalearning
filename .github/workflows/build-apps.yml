@@ -20,6 +20,7 @@ jobs:
       - uses: actions/setup-python@v5
         with: { python-version: '3.12' }
       - run: npm ci
+      - run: node scripts/vendor-pglite.mjs
       - run: pip install pandas numpy matplotlib beautifulsoup4
       - run: npm run validate
 
@@ -49,6 +50,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with: { name: pyodide, path: vendor/pyodide }
       - run: npm ci
+      - run: node scripts/vendor-pglite.mjs
       - run: npm run build:web && npx cap sync android
       - name: Chave privada (opcional, via secrets)
         env:
@@ -84,6 +86,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with: { name: pyodide, path: vendor/pyodide }
       - run: npm ci
+      - run: node scripts/vendor-pglite.mjs
       - run: npx electron-builder --win nsis portable --x64 --publish never
       - uses: actions/upload-artifact@v4
         with: { name: Datum-Windows, path: release/*.exe }
@@ -99,6 +102,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with: { name: pyodide, path: vendor/pyodide }
       - run: npm ci
+      - run: node scripts/vendor-pglite.mjs
       - run: npx electron-builder --linux AppImage deb --x64 --publish never
       - uses: actions/upload-artifact@v4
         with:

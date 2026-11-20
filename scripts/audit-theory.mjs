@@ -40,7 +40,8 @@ let theoryText = '';
 const unescape = (s) => s.replace(/\\(.)/g, '$1');
 for (const course of COURSES) {
   // cada trilha acumula a sua teoria; Estatística herda a de Python (pré-requisito declarado)
-  if (course.id !== 'stats') theoryText = course.id === 'sql' ? '' : theoryText;
+  // SQL e Bancos de Dados começam do zero; Python herda nada; Estatística herda a teoria de Python
+  if (course.id === 'sql' || course.id === 'db') theoryText = '';
   for (const unit of course.units) {
     for (const lesson of unit.lessons) {
       lesson.steps.forEach((step, i) => {

@@ -1,6 +1,8 @@
 import { COURSES, findLesson, allLessons, TRACK_LEVELS, LEVEL_DESC, stepByRef, migrateRef } from './content/index.js';
 import { INTERVIEW, INTERVIEW_SQL, INTERVIEW_PY, LEVELS } from './content/interview.js';
 import { SCHEMA_DOC } from './content/datasets.js';
+import { PG_SCHEMA_DOC } from './content/pg-dataset.js';
+import { pgRun, pgEvaluate } from './engines/pg-client.js';
 import { withVariant } from './content/helpers.js';
 import * as store from './state.js';
 import { renderMarkdown, inline, esc, highlight } from './markdown.js';
@@ -443,11 +445,26 @@ function resultTable(res) {
 
 const hintBox = (html) => h('div', { class: 'hint-box' }, ic('lightbulb', 18), h('div', { html }));
 
-function schemaPanel() {
+function schemaPanel(engine = 'sqlite') {
+  const doc = engine === 'pg' ? PG_SCHEMA_DOC : SCHEMA_DOC;
   return h('details', { class: 'panel' },
-    h('summary', {}, ic('database', 16), 'Esquema do banco'),
-    h('div', { class: 'panel-body' }, h('ul', {}, SCHEMA_DOC.map((t) => h('li', {}, h('code', {}, t.tabela), ' ', t.colunas)))),
+    h('summary', {}, ic('database', 16), engine === 'pg' ? 'Esquema do banco (PostgreSQL 18)' : 'Esquema do banco'),
+    h('div', { class: 'panel-body' }, h('ul', {}, doc.map((t) => h('li', {}, h('code', {}, t.tabela), ' ', t.colunas)))),
   );
+}
+
+// Mostra o resultado de uma execução no PostgreSQL (tabela, plano de execução ou erro).
+function pgOutput(out, res) {
+  if (!res.ok && (res.error || res.reason)) {
+    const msg = typeof res.error === 'string' ? res.error : res.reason;
+    put(out, h('pre', { class: 'error' }, `Erro: ${msg}`), res.hint ? hintBox(res.hint) : null);
+    return;
+  }
+  const isPlan = res.columns?.length === 1 && res.columns[0] === 'QUERY PLAN';
+  if (isPlan) put(out, h('pre', { class: 'stdout plan' }, res.values.map((r) => r[0]).join('\n')));
+  else if (res.columns?.length) put(out, resultTable(res));
+  else put(out, h('div', { class: 'small faint' }, `Comando executado${res.affected ? ` (${res.affected} linha(s) afetada(s))` : ''}. Nada foi gravado: cada execução começa do banco original.`));
+  if (res.ms !== undefined) out.append(h('div', { class: 'tiny faint' }, `${res.ms} ms no PostgreSQL deste aparelho`));
 }
 
 function pythonOutput(out, res) {
@@ -480,10 +497,13 @@ const renderers = {
 
   example(step) {
     const out = h('div', { class: 'output' });
-    const isSql = step.lang === 'sql';
+    const isPg = step.lang === 'pg';
+    const isSql = step.lang === 'sql' || isPg;
     const run = async () => {
       put(out, h('div', { class: 'small faint loading' }, isSql ? 'Executando...' : 'Preparando o Python...'));
-      if (isSql) {
+      if (isPg) {
+        pgOutput(out, await pgRun(editor.value, (m) => put(out, h('div', { class: 'small faint loading' }, m))));
+      } else if (isSql) {
         const db = await freshDb();
         try { put(out, resultTable(runQuery(db, editor.value))); }
         catch (e) { put(out, h('pre', { class: 'error' }, `Erro: ${e.message}`)); }
@@ -493,7 +513,7 @@ const renderers = {
         catch (e) { put(out, h('pre', { class: 'error' }, e.message)); }
       }
     };
-    const wrap = codeEditor(step.code, step.lang, run);
+    const wrap = codeEditor(step.code, isPg ? 'sql' : step.lang, run);
     const editor = wrap.textarea;
     if (isSql) setTimeout(run, 30);
     const dataPanel = step.setup ? h('details', { class: 'panel' },
@@ -504,7 +524,7 @@ const renderers = {
         h('div', { class: 'theory-card' }, h('div', { class: 'stack', style: { gap: '14px' } },
           h('h2', {}, step.title),
           step.md ? h('div', { class: 'md', html: renderMarkdown(step.md) }) : null,
-          isSql ? schemaPanel() : dataPanel,
+          isSql ? schemaPanel(isPg ? 'pg' : 'sqlite') : dataPanel,
           wrap,
           h('div', { class: 'row' }, h('button', { class: 'btn sm', onclick: run }, ic('play', 15), isSql ? 'Executar de novo' : 'Executar exemplo'), h('span', { class: 'tiny faint' }, 'Altere o código e execute para experimentar')),
           out,
@@ -597,8 +617,10 @@ const renderers = {
 
   sql(step) {
     const out = h('div', { class: 'output' });
+    const isPg = step.engine === 'pg';
     const run = async () => {
       put(out, h('div', { class: 'small faint loading' }, 'Executando...'));
+      if (isPg) { pgOutput(out, await pgRun(editor.value, (m) => put(out, h('div', { class: 'small faint loading' }, m)))); return; }
       const db = await freshDb();
       try {
         put(out, resultTable(runQuery(db, editor.value)));
@@ -616,9 +638,9 @@ const renderers = {
     setTimeout(() => footerReady(editor.value.trim().length > 0), 50);
     return {
       el: h('div', { class: 'step' },
-        kindLabel([ic(step.kind === 'debug' ? 'bug' : 'database', 15), step.kind === 'debug' ? 'Prática · Encontre o bug' : 'Prática · SQL'], step.ordered ? h('span', { class: 'badge warn pill' }, 'a ordem importa') : null),
+        kindLabel([ic(step.kind === 'debug' ? 'bug' : 'database', 15), step.kind === 'debug' ? 'Prática · Encontre o bug' : isPg ? 'Prática · PostgreSQL' : 'Prática · SQL'], step.ordered ? h('span', { class: 'badge warn pill' }, 'a ordem importa') : null),
         h('h2', { html: inline(step.prompt) }),
-        schemaPanel(),
+        schemaPanel(isPg ? 'pg' : 'sqlite'),
         step.hint ? h('details', { class: 'panel' }, h('summary', {}, ic('lightbulb', 16), 'Dica'), h('div', { class: 'panel-body', html: inline(step.hint) })) : null,
         wrap,
         h('div', { class: 'row' }, h('button', { class: 'btn sm', onclick: run }, ic('play', 15), 'Executar'), h('span', { class: 'tiny faint hide-touch' }, 'Ctrl+Enter executa')),
@@ -626,8 +648,13 @@ const renderers = {
       code: true,
       getCode: () => editor.value,
       check: async () => {
-        const SQL = await initSql();
-        const res = evaluateSql(() => createDb(SQL), step, editor.value);
+        let res;
+        if (isPg) {
+          res = await pgEvaluate(step, editor.value, (m) => put(out, h('div', { class: 'small faint loading' }, m)));
+        } else {
+          const SQL = await initSql();
+          res = evaluateSql(() => createDb(SQL), step, editor.value);
+        }
         if (res.error) {
           put(out, h('pre', { class: 'error' }, res.reason), res.hint ? hintBox(res.hint) : null);
           return { ok: false, error: true, message: res.reason };

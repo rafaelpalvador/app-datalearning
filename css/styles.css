@@ -30,6 +30,7 @@
   --c-sql: #2563eb;
   --c-python: #059669;
   --c-stats: #c2410c;
+  --c-db: #6250d6;
   /* código */
   --code-bg: #f7f8fa;
   --tk-kw: #7c3aed;
@@ -76,6 +77,7 @@
     --c-sql: #5b8def;
     --c-python: #2ea883;
     --c-stats: #e06f36;
+    --c-db: #9085e9;
     --code-bg: #0e1115;
     --tk-kw: #c4a5ff;
     --tk-str: #7ee0b0;
@@ -111,6 +113,7 @@
   --c-sql: #5b8def;
   --c-python: #2ea883;
   --c-stats: #e06f36;
+  --c-db: #9085e9;
   --code-bg: #0e1115;
   --tk-kw: #c4a5ff;
   --tk-str: #7ee0b0;
@@ -532,3 +535,6 @@ details.panel ul { margin: 0; padding-left: 18px; display: flex; flex-direction:
 .toast.update { pointer-events: auto; }
 .toast.update span { flex: 1; }
 .toast.update .icon-btn { color: var(--on-ink); }
+
+/* plano de execução do PostgreSQL */
+.stdout.plan { font-size: 0.8rem; line-height: 1.45; white-space: pre; overflow-x: auto; }

@@ -1,6 +1,7 @@
 import { SQL_COURSE } from './sql-course.js';
 import { PYTHON_COURSE } from './python-course.js';
 import { STATS_COURSE } from './stats-course.js';
+import { DB_COURSE } from './db-course.js';
 import { SQL_THEORY } from './theory-sql.js';
 import { PY_THEORY } from './theory-python.js';
 import { STATS_THEORY } from './theory-stats.js';
@@ -8,7 +9,7 @@ import { SQL_PLUS } from './sql-plus.js';
 import { PY_PLUS } from './py-plus.js';
 import { STATS_PLUS } from './stats-plus.js';
 
-export const COURSES = [SQL_COURSE, PYTHON_COURSE, STATS_COURSE];
+export const COURSES = [SQL_COURSE, PYTHON_COURSE, STATS_COURSE, DB_COURSE];
 
 // Teoria antes da prática: os cards de aprofundamento entram logo depois da teoria
 // de abertura da lição, antes do primeiro exercício. Um card com { before: n } entra
@@ -86,6 +87,7 @@ export const TRACK_LEVELS = [
 export const LEVEL_DESC = {
   sql: { 1: 'SELECT, filtros e agregações', 2: 'JOINs, subqueries e CTEs', 3: 'Window functions, datas, modelagem e transações', 4: 'Performance, análises de negócio e padrões de engenharia de dados' },
   python: { 1: 'Python essencial e NumPy', 2: 'pandas: seleção, agregação, junção e limpeza', 3: 'Séries temporais, visualização, extração de dados e estatística', 4: 'Desempenho, dados maiores que a memória e código de produção' },
+  db: { 1: 'SGBD, ACID, modelagem, chaves, tipos, normalização e integridade', 2: 'SQL profissional: DML, junções, agregações avançadas, tratamento de dados e JSONB', 3: 'CTEs, window functions, objetos programáveis, MVCC, isolamento e locks', 4: 'Internals, índices, EXPLAIN, particionamento, backup, replicação e segurança', 5: 'OLAP, modelagem dimensional, NoSQL, vetores, cloud e migrations' },
   stats: { 1: 'Conceitos, estatística descritiva e probabilidade', 2: 'Intervalos de confiança, testes A/B, regressão e ANOVA', 3: 'Séries temporais, não paramétricos, regressão avançada e poder', 4: 'Bayesiana, verossimilhança, inferência causal e experimentação avançada' },
 };
 

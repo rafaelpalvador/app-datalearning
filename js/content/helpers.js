@@ -53,3 +53,8 @@ export function withVariant(step) {
 // opts: { starter, setup, tests, packages, hint }
 export const py = (prompt, solution, tests, opts = {}) =>
   ({ type: 'python', prompt, solution: solution.trim(), tests: tests.trim(), starter: opts.starter ?? '', setup: opts.setup ?? '', setupNote: opts.setupNote ?? '', packages: opts.packages ?? [], hint: opts.hint ?? '' });
+
+// ───────── PostgreSQL (trilha de Bancos de Dados): mesmos formatos, rodando no PostgreSQL 18 do app
+export const pgsql = (prompt, solution, opts = {}) => ({ ...sql(prompt, solution, opts), engine: 'pg', allowEmpty: !!opts.allowEmpty });
+export const debugPg = (prompt, buggy, solution, opts = {}) => pgsql(prompt, solution, { ...opts, starter: buggy, kind: 'debug' });
+export const exPg = (title, md, code, after = '') => example(title, md, 'pg', code, after);
