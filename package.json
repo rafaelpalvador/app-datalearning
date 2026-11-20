@@ -1,6 +1,6 @@
 {
   "name": "datalingo",
-  "version": "1.9.1",
+  "version": "2.0.0",
   "description": "Datum: aprenda SQL, Python e estatística para análise de dados",
   "scripts": {
     "start": "npx --yes http-server -c-1 -p 8080 .",
@@ -14,7 +14,8 @@
     "android:sync": "npm run fetch:pyodide && npm run build:web && npx cap sync android",
     "build:sdk": "esbuild scripts/anthropic-sdk-entry.mjs --bundle --format=esm --platform=browser --minify --legal-comments=eof --outfile=vendor/anthropic-sdk.js",
     "icons:build": "node scripts/render-icons.cjs",
-    "vendor:pglite": "node scripts/vendor-pglite.mjs"
+    "vendor:pglite": "node scripts/vendor-pglite.mjs",
+    "lab:gerar": "node scripts/gerar-lab.mjs"
   },
   "repository": {
     "type": "git",

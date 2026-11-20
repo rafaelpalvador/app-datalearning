@@ -2,7 +2,7 @@ import { COURSES, findLesson, allLessons, TRACK_LEVELS, LEVEL_DESC, stepByRef, m
 import { INTERVIEW, INTERVIEW_SQL, INTERVIEW_PY, LEVELS } from './content/interview.js';
 import { SCHEMA_DOC } from './content/datasets.js';
 import { PG_SCHEMA_DOC } from './content/pg-dataset.js';
-import { pgRun, pgEvaluate } from './engines/pg-client.js';
+import { pgRun, pgEvaluate, pgWarm } from './engines/pg-client.js';
 import { withVariant } from './content/helpers.js';
 import * as store from './state.js';
 import { renderMarkdown, inline, esc, highlight } from './markdown.js';
@@ -333,6 +333,8 @@ function viewHome() {
 function viewCourse(courseId) {
   const course = COURSES.find((c) => c.id === courseId);
   if (!course) return viewHome();
+  // Trilha PostgreSQL: já vai abrindo o banco em segundo plano enquanto o aluno escolhe a lição.
+  if (course.id === 'db') pgWarm().catch(() => {});
   const s = store.getState();
   const list = allLessons(course);
   const currentId = list.find((l) => !s.completed[l.id])?.id;
@@ -380,7 +382,7 @@ function viewCourse(courseId) {
         h('h1', {}, course.title),
         h('p', { class: 'muted' }, course.description),
         h('div', { class: 'stat-row' },
-          h('div', {}, h('strong', {}, '4'), h('span', {}, 'níveis')),
+          h('div', {}, h('strong', {}, new Set(course.units.map((u) => u.level)).size), h('span', {}, 'níveis')),
           h('div', {}, h('strong', {}, `${p.done}/${p.total}`), h('span', {}, 'lições')),
           h('div', {}, h('strong', {}, n.theory), h('span', {}, 'cards de teoria')),
           h('div', {}, h('strong', {}, n.practice), h('span', {}, 'exercícios práticos')),
@@ -460,9 +462,13 @@ function pgOutput(out, res) {
     put(out, h('pre', { class: 'error' }, `Erro: ${msg}`), res.hint ? hintBox(res.hint) : null);
     return;
   }
-  const isPlan = res.columns?.length === 1 && res.columns[0] === 'QUERY PLAN';
-  if (isPlan) put(out, h('pre', { class: 'stdout plan' }, res.values.map((r) => r[0]).join('\n')));
-  else if (res.columns?.length) put(out, resultTable(res));
+  const conjunto = (r) => (r.columns?.length === 1 && r.columns[0] === 'QUERY PLAN'
+    ? h('pre', { class: 'stdout plan' }, r.values.map((x) => x[0]).join('\n'))
+    : resultTable(r));
+  if (res.sets?.length > 1) {
+    put(out, ...res.sets.map((r, i) => h('div', { class: 'stack', style: { gap: '6px' } },
+      h('div', { class: 'tiny faint' }, `Resultado ${i + 1} de ${res.sets.length}`), conjunto(r))));
+  } else if (res.columns?.length) put(out, conjunto(res));
   else put(out, h('div', { class: 'small faint' }, `Comando executado${res.affected ? ` (${res.affected} linha(s) afetada(s))` : ''}. Nada foi gravado: cada execução começa do banco original.`));
   if (res.ms !== undefined) out.append(h('div', { class: 'tiny faint' }, `${res.ms} ms no PostgreSQL deste aparelho`));
 }
@@ -981,6 +987,7 @@ function startLesson(lessonId) {
   if (!found) return viewHome();
   const { course, lesson } = found;
   if (!lessonUnlocked(course, lessonId)) { location.hash = `#/curso/${course.id}`; return; }
+  if (course.id === 'db') pgWarm().catch(() => {});
   const done = !!store.getState().completed[lessonId];
   const items = lesson.steps.map((step) => ({ step: done ? withVariant(step) : step, lessonId, stepIndex: step.uid, courseId: course.id }));
   startSession({ title: lesson.title, items, mode: done ? 'practice' : 'lesson', lessonId, backHref: `#/curso/${course.id}` });

@@ -1,0 +1,9 @@
+-- Script do pgbench: cada cliente transfere entre contas aleatórias, concentrando
+-- 30% das transferências nas contas 1 a 10 (disputa máxima pelos mesmos locks).
+\set quente random(1, 10)
+\set a random(1, 1000)
+\set b random(1, 1000)
+\set valor random(1, 50)
+\set r random(1, 100)
+SELECT transferir(md5(random()::text || clock_timestamp()::text),
+                  CASE WHEN :r <= 30 THEN :quente ELSE :a END, :b, :valor);

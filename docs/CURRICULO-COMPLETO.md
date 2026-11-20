@@ -56,6 +56,14 @@ resolvidos executáveis; nenhum exercício cobra um comando, função ou conceit
 - Causalidade: confundidores, DAGs, colisores, diferença em diferenças, escore de propensão, regressão descontínua, variáveis instrumentais, controle sintético
 - Negócio: sobrevivência (Kaplan-Meier), coortes, retenção, churn, LTV, CAC, controle estatístico de processo (gráficos p e c, regras de Western Electric)
 
+### Bancos de Dados com PostgreSQL
+Referências: documentação oficial do PostgreSQL 18 e notas do 19, *The Data Warehouse Toolkit* (Kimball), *Designing Data-Intensive Applications* (Kleppmann), documentação do PgBouncer, pgvector, Redis, Cassandra e MongoDB.
+- Fundamentos e modelagem: banco × SGBD × instância × cluster × esquema, ACID, álgebra relacional (seleção, projeção, junção, união, diferença, divisão), modelagem conceitual/lógica/física, cardinalidades, entidades associativas, chaves naturais × substitutas (SERIAL, IDENTITY, UUIDv4, UUIDv7), tipos físicos (NUMERIC × FLOAT, TIMESTAMPTZ, TEXT × VARCHAR, JSONB, arrays, enums, domínios), normalização 1FN–5FN e BCNF, desnormalização consciente, constraints e políticas referenciais (CASCADE, RESTRICT, SET NULL)
+- SQL profissional: DDL/DML/DCL/TCL, RETURNING, UPDATE FROM, DELETE USING, ON CONFLICT, MERGE, ordem lógica de execução, todos os joins, anti-join e semi-join, LATERAL, FILTER, ROLLUP/CUBE/GROUPING SETS, percentis, subconsultas correlacionadas, ANY/ALL, NOT IN com NULL, operadores de conjunto, NULL/COALESCE/NULLIF/CASE, datas e fusos, regex, JSONB e arrays, saneamento de dados sujos (staging, validação de tipos, deduplicação)
+- SQL avançado e concorrência: CTEs (materialização), CTEs de modificação, CTEs recursivas (SEARCH, CYCLE), window functions de ranking e navegação, frames ROWS/RANGE/GROUPS, médias móveis, saldos, coortes e retenção, views, materialized views e refresh concorrente, funções (volatilidade), PL/pgSQL, procedures, triggers de auditoria, quando evitar lógica no banco, MVCC (xmin/xmax), níveis de isolamento e anomalias (dirty read, non-repeatable, phantom, lost update, write skew), SSI e retentativas, controle otimista, savepoints, locks de linha e de tabela, NOWAIT, SKIP LOCKED (filas), advisory locks, deadlocks e prevenção, ledger com idempotência
+- Internals, performance e operação: páginas de 8 KB, heap, ctid, TOAST, WAL, checkpoints, LSN, I/O assíncrono (PG18), bloat, VACUUM, autovacuum, freeze/wraparound, HOT e fillfactor, B-tree (composto, parcial, expressão, INCLUDE, custo de escrita, índices não usados, FKs sem índice), Hash, GIN (jsonb, pg_trgm), GiST e exclusion constraints, SP-GiST, BRIN e correlação, busca textual, EXPLAIN (ANALYZE, BUFFERS), nós de acesso e de junção, estatísticas e estatísticas estendidas, predicados não-SARGable, conversões implícitas, paginação keyset, N+1, particionamento RANGE/LIST/HASH e pruning, réplicas e sharding (Citus), backup lógico × físico, PITR, RPO/RTO, replicação física e lógica, slots, CDC, Patroni, PgBouncer (modos e limitações), roles, privilégios, SECURITY DEFINER, RLS, TLS, criptografia, auditoria, pg_stat_activity, pg_stat_statements, pg_locks, roteiros de incidente
+- Ecossistema moderno: OLTP × OLAP, armazenamento colunar, Kimball (grão, fatos e dimensões, estrela × floco de neve, dimensão de data, métricas aditivas/semiaditivas/não aditivas, dimensões conformadas e degeneradas), fatos transacional, snapshot periódico e acumulado, SCD 0/1/2/3/4/6, BigQuery, Snowflake, Redshift, ClickHouse, DuckDB, lakehouse (Parquet, Delta, Iceberg), ELT com dbt, CAP e PACELC, Redis (cache-aside, TTL, stampede, rate limiting, sorted sets, streams), MongoDB (embutir × referenciar), Cassandra (modelagem por consulta, R + W > N), grafos (Cypher × CTE recursiva), embeddings, distâncias, pgvector (HNSW × IVFFlat), bancos gerenciados (RDS, Aurora, Cloud SQL, AlloyDB, Neon, Supabase), migrations (Flyway, Liquibase, Alembic), expand/contract, operações seguras (CONCURRENTLY, NOT VALID + VALIDATE, lock_timeout), CI/CD de banco (Testcontainers, pgTAP, linters de migração)
+
 ## Grade atual de lições
 
 ### SQL do Zero ao Avançado
@@ -140,3 +148,27 @@ resolvidos executáveis; nenhum exercício cobra um comando, função ou conceit
 - **Inferência causal**: Confundimento e diferença em diferenças · Escore de propensão e estratificação · Regressão descontínua, variáveis instrumentais e controle sintético
 - **Experimentação avançada**: Espiar resultados, SRM e testes sequenciais · Bandits e Thompson Sampling · Análise de sobrevivência
 - **Métricas de produto e negócio**: Métricas de razão e o método delta · Coortes, retenção, churn e LTV · Controle estatístico de processo
+
+### Bancos de Dados com PostgreSQL
+
+Roda num PostgreSQL 18 real (PGlite, WebAssembly) dentro do app, sobre um ERP com ≈ 480 mil linhas. Projetos e incidentes em escala maior no laboratório Docker (`labs/postgres`).
+
+**Nível 1 · Fundamentos e modelagem** — Fundamentos, arquitetura e modelagem relacional
+
+- Banco, SGBD, instância e ACID · Álgebra relacional: a matemática por trás do SQL · Modelagem conceitual: entidades e relacionamentos · Modelagem lógica: chaves primárias e estrangeiras · Modelagem física: escolhendo os tipos certos · Normalização: 1FN, 2FN, 3FN, BCNF, 4FN e 5FN · Integridade no banco: constraints e políticas referenciais · Projeto: modelagem e DDL de um ERP financeiro
+
+**Nível 2 · SQL profissional** — SQL profissional e lógica de negócio
+
+- DDL, DML, DCL e TCL: o SQL que altera o banco · Ordem lógica de execução · Junções em profundidade, anti-join e LATERAL · Agregações avançadas: FILTER, ROLLUP, CUBE e GROUPING SETS · Subconsultas, ANY/ALL e operadores de conjunto · NULL, CASE, datas e expressões regulares · JSONB e arrays: dados semiestruturados · Projeto: saneamento de dados e relatórios gerenciais
+
+**Nível 3 · SQL avançado e concorrência** — SQL avançado, programação no banco e concorrência
+
+- CTEs: organizar, materializar e modificar · CTEs recursivas: hierarquias e grafos · Window functions: ranking e navegação · Molduras, médias móveis, saldos e análise de coortes · Views, materialized views, funções, procedures e triggers · Transações, MVCC e níveis de isolamento · Locks, SKIP LOCKED e deadlocks · Projeto: ledger financeiro à prova de race conditions
+
+**Nível 4 · Internals, performance e operação** — Internals, performance e operação em produção
+
+- Como o PostgreSQL guarda os dados: páginas, heap, TOAST e WAL · Bloat, VACUUM, autovacuum e HOT · Índices B-tree: compostos, parciais, de expressão e cobertura · GIN, GiST, BRIN, Hash e busca textual · EXPLAIN: lendo planos de execução · Consultas que matam a performance (e como reescrever) · Particionamento e estratégias de escala · Backup, PITR, replicação e alta disponibilidade · Segurança: roles, privilégios, RLS e criptografia · Observabilidade e resposta a incidentes · Projeto: tuning de um sistema lento e plano de recuperação
+
+**Nível 5 · Ecossistema moderno** — Ecossistema moderno: OLAP, NoSQL, vetores, nuvem e migrations
+
+- OLTP × OLAP e modelagem dimensional (Kimball) · Dimensões que mudam com o tempo (SCD) · Data warehouses na nuvem, lakehouse e DuckDB · NoSQL: Redis, MongoDB, Cassandra, grafos e o teorema CAP · Bancos vetoriais e busca semântica (pgvector) · Migrations, mudanças sem parada e CI/CD de banco · Bancos gerenciados na nuvem e arquitetura de referência · Projeto final: da transação ao dashboard

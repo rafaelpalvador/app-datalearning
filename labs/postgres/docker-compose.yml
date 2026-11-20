@@ -1,0 +1,77 @@
+# Laboratório do curso "Bancos de Dados com PostgreSQL" (app Datum)
+# Subir:   docker compose up -d        (a 1ª carga da base leva alguns minutos)
+# Entrar:  docker compose exec postgres psql -U aluno -d erp
+# Zerar:   docker compose down -v      (apaga volumes e recomeça do zero)
+services:
+  postgres:
+    image: postgres:18
+    container_name: datum-postgres
+    environment:
+      POSTGRES_USER: aluno
+      POSTGRES_PASSWORD: aluno          # só para o laboratório local
+      POSTGRES_DB: erp
+      POSTGRES_INITDB_ARGS: "--data-checksums"
+    command: >
+      postgres -c config_file=/etc/postgresql/postgresql.conf
+    ports:
+      - "5432:5432"
+    volumes:
+      - pgdata:/var/lib/postgresql
+      - walarquivo:/arquivo_wal
+      - backups:/backups
+      - ./conf/postgresql.conf:/etc/postgresql/postgresql.conf:ro
+      - ./initdb:/docker-entrypoint-initdb.d:ro
+      - ./projetos:/projetos:ro
+      - ./incidentes:/incidentes:ro
+      - ./bench:/bench:ro
+    shm_size: 512mb
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U aluno -d erp"]
+      interval: 5s
+      timeout: 3s
+      retries: 60
+
+  pgbouncer:
+    image: edoburu/pgbouncer:latest     # fixe uma versão (tag) se for usar além do curso
+    container_name: datum-pgbouncer
+    depends_on:
+      postgres: { condition: service_healthy }
+    environment:
+      DB_HOST: postgres
+      DB_USER: aluno
+      DB_PASSWORD: aluno
+      DB_NAME: erp
+      AUTH_TYPE: scram-sha-256
+      POOL_MODE: transaction
+      DEFAULT_POOL_SIZE: "20"
+      MAX_CLIENT_CONN: "1000"
+    ports:
+      - "6432:5432"
+
+  redis:
+    image: redis:7.4
+    container_name: datum-redis
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+    ports:
+      - "6379:6379"
+
+  # Servidor separado para treinar restauração (PITR) sem tocar no principal.
+  # Sobe só quando pedido: docker compose --profile restauracao up -d postgres-restaurado
+  postgres-restaurado:
+    image: postgres:18
+    container_name: datum-restaurado
+    profiles: ["restauracao"]
+    environment:
+      POSTGRES_PASSWORD: aluno
+    volumes:
+      - restaurado:/var/lib/postgresql
+      - walarquivo:/arquivo_wal:ro
+      - backups:/backups:ro
+    ports:
+      - "5433:5432"
+
+volumes:
+  pgdata:
+  walarquivo:
+  backups:
+  restaurado:

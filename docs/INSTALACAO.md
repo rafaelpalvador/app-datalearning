@@ -113,10 +113,20 @@ Use o mesmo botão para atualizar; os dois aparelhos atualizam o mesmo Gist.
 **Manual:** **Perfil → Backup manual → Exportar** num aparelho (o código é copiado) → envie para você mesmo →
 **Perfil → Backup manual → Importar** no outro.
 
+## 🐘 Laboratório PostgreSQL (opcional)
+
+A trilha **Bancos de Dados com PostgreSQL** roda inteira dentro do app (um PostgreSQL 18 de verdade, em WebAssembly,
+sem internet). Na primeira vez que você abre uma lição dela, o app monta o banco do curso (≈ 480 mil linhas, alguns
+segundos) e guarda no aparelho; depois abre em cerca de 1 segundo.
+
+Para os projetos em escala real (2 a 20 milhões de linhas), concorrência de verdade com `pgbench`, PITR e os
+incidentes simulados, use o laboratório Docker do repositório: veja [`labs/postgres/README.md`](../labs/postgres/README.md).
+
 ## 🛠️ Compilar você mesmo
 
 ```bash
 npm ci
+npm run vendor:pglite      # copia o PostgreSQL em WebAssembly (~16 MB) para vendor/pglite
 npm run fetch:pyodide      # baixa o Python offline (~80 MB) para vendor/pyodide
 npm run desktop            # abre o app de desktop em modo desenvolvimento
 npm run dist:linux         # gera AppImage e .deb em release/

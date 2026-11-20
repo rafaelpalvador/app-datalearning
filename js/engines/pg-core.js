@@ -57,13 +57,16 @@ export async function runSql(db, sql, separado = false) {
   } else {
     results = await db.exec(sql, { rowMode: 'array' });
   }
-  let last = null;
-  for (const r of results) if (r.fields?.length) last = r;
-  if (!last) return { columns: [], values: [], affected: results.reduce((a, r) => a + (r.affectedRows || 0), 0) };
-  return {
-    columns: last.fields.map((f) => f.name),
-    values: last.rows.map((row) => row.map((v, i) => norm(v, last.fields[i].dataTypeID))),
-  };
+  const conv = (r) => ({
+    columns: r.fields.map((f) => f.name),
+    values: r.rows.map((row) => row.map((v, i) => norm(v, r.fields[i].dataTypeID))),
+  });
+  const comColunas = results.filter((r) => r.fields?.length);
+  if (!comColunas.length) return { columns: [], values: [], affected: results.reduce((a, r) => a + (r.affectedRows || 0), 0) };
+  const res = conv(comColunas[comColunas.length - 1]);
+  // Vários SELECT/EXPLAIN no mesmo código: guarda os anteriores para a tela mostrar todos (antes × depois).
+  if (comColunas.length > 1) res.sets = comColunas.slice(-8).map((r) => { const c = conv(r); c.values = c.values.slice(0, 200); return c; });
+  return res;
 }
 
 /** Roda dentro de BEGIN … ROLLBACK: nada do que o código faz fica gravado. */

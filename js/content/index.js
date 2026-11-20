@@ -82,6 +82,7 @@ export const TRACK_LEVELS = [
   { id: 2, name: 'Intermediário' },
   { id: 3, name: 'Avançado' },
   { id: 4, name: 'Especialista' },
+  { id: 5, name: 'Arquitetura' },   // só a trilha de Bancos de Dados tem o 5º nível
 ];
 
 export const LEVEL_DESC = {
