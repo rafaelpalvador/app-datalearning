@@ -2,6 +2,7 @@
 // Não há servidor do Datum: o progresso fica num arquivo da conta GitHub da própria pessoa,
 // e o token (com permissão só para Gists) fica salvo apenas no aparelho.
 import * as store from './state.js';
+import { careerOf } from './career.js';
 
 const API = 'https://api.github.com';
 const FILE = 'datum-progresso.json';
@@ -121,7 +122,7 @@ export function buildPortfolio() {
   const files = {};
   const done = (c) => c.units.flatMap((u) => u.lessons).filter((l) => s.completed[l.id]).length;
   const total = (c) => c.units.reduce((a, u) => a + u.lessons.length, 0);
-  const lv = store.levelInfo(s.xp);
+  const lv = careerOf(s);
   const ivSolved = INTERVIEW.filter((p) => s.interview[p.id]);
 
   // entrevistas, por linguagem
@@ -150,7 +151,7 @@ export function buildPortfolio() {
   const lines = [
     `# Portfólio de dados${login ? ` · @${login}` : ''}`,
     '',
-    `Soluções que escrevi estudando SQL, Python e estatística no Datum. Nível atual: **${lv.title}** (${s.xp} XP).`,
+    `Soluções que escrevi estudando SQL, Python e estatística no Datum. Cargo atual no app: **${lv.title}** (${lv.pts} pontos de lições concluídas, ${s.xp} XP).`,
     '',
     '| trilha | lições concluídas |',
     '|---|---|',

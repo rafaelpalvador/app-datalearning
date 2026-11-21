@@ -5,6 +5,7 @@ import { PG_SCHEMA_DOC } from './content/pg-dataset.js';
 import { pgRun, pgEvaluate, pgWarm } from './engines/pg-client.js';
 import { withVariant } from './content/helpers.js';
 import * as store from './state.js';
+import { careerOf, skippedLesson } from './career.js';
 import { renderMarkdown, inline, esc, highlight } from './markdown.js';
 import { freshDb, runQuery, evaluateSql, initSql, createDb, friendlySqlError } from './engines/sql-engine.js';
 import { runPython, friendlyPyError, cancelPython } from './engines/python-engine.js';
@@ -142,7 +143,8 @@ function courseProgress(course) {
   const s = store.getState();
   const list = allLessons(course);
   const done = list.filter((l) => s.completed[l.id]).length;
-  return { done, total: list.length, pct: pct(done, list.length) };
+  const skipped = list.filter((l) => s.completed[l.id] && skippedLesson(s, l.id)).length;
+  return { done, skipped, studied: done - skipped, total: list.length, pct: pct(done, list.length) };
 }
 
 const lessonCounts = (lesson) => ({
@@ -202,12 +204,12 @@ function brand() {
 
 function levelMini() {
   const s = store.getState();
-  const lv = store.levelInfo(s.xp);
+  const lv = careerOf(s);
   return h('a', { class: 'side-level', href: '#/perfil' },
-    h('div', { class: 'spread' }, h('span', { class: 'eyebrow' }, `Nível ${lv.index}`), h('span', { class: 'small num', style: { color: 'var(--xp)' } }, `${s.xp} XP`)),
+    h('div', { class: 'spread' }, h('span', { class: 'eyebrow' }, 'Cargo'), h('span', { class: 'small num', style: { color: 'var(--xp)' } }, `${s.xp} XP`)),
     h('div', { class: 'lvl-title' }, lv.title),
     h('div', { class: 'progress' }, h('div', { class: 'bar', style: { width: `${Math.round(lv.progress * 100)}%`, background: 'var(--xp)' } })),
-    h('div', { class: 'tiny faint' }, lv.next ? `${lv.toNext} XP para ${lv.next}` : 'Nível máximo alcançado'),
+    h('div', { class: 'tiny faint' }, lv.next ? `${lv.toNext} ${lv.toNext === 1 ? 'ponto' : 'pontos'} de lições para ${lv.next}` : 'Cargo máximo alcançado'),
   );
 }
 
@@ -223,9 +225,9 @@ function sidebar(active) {
 
 function topbar() {
   const s = store.getState();
-  const lv = store.levelInfo(s.xp);
+  const lv = careerOf(s);
   return h('header', { class: 'topbar' }, brand(),
-    h('a', { class: 'badge', href: '#/perfil', style: { gap: '6px' } }, h('span', { class: 'num' }, `Nv ${lv.index}`), h('span', { style: { color: 'var(--xp)' }, class: 'num' }, `${s.xp} XP`)));
+    h('a', { class: 'badge', href: '#/perfil', style: { gap: '6px' }, title: lv.title }, h('span', { class: 'num' }, `Cargo ${lv.index}`), h('span', { style: { color: 'var(--xp)' }, class: 'num' }, `${s.xp} XP`)));
 }
 
 function bottomNav(active) {
@@ -347,11 +349,21 @@ function viewCourse(courseId) {
       const unitOpen = lessonUnlocked(course, unit.lessons[0].id);
       const cp = s.checkpoints[unit.id];
       const doneCount = unit.lessons.filter((l) => s.completed[l.id]).length;
+      const puladas = unit.lessons.filter((l) => s.completed[l.id] && skippedLesson(s, l.id));
       return h('section', { class: 'card unit', style: { '--track': trackVar(course.id) } },
         h('div', { class: 'unit-head' },
           h('span', { class: 'unit-num' }, String(ui + 1).padStart(2, '0')),
           h('div', {}, h('h3', {}, unit.title), h('p', { class: 'small muted' }, unit.description)),
           h('span', { class: 'small faint num' }, `${doneCount}/${unit.lessons.length}`)),
+        puladas.length ? h('div', { class: 'skip-note small' },
+          ic('flag', 14),
+          h('span', {}, `${puladas.length} ${puladas.length === 1 ? 'lição marcada' : 'lições marcadas'} como concluída${puladas.length === 1 ? '' : 's'} sem estudar (checkpoint aprovado${puladas.some((l) => s.completed[l.id].via === 'professor') ? ' ou "desbloquear tudo"' : ''}).`),
+          h('button', { class: 'btn ghost sm', onclick: async () => {
+            if (!await askConfirm(`Voltar ${puladas.length === 1 ? 'esta lição' : `estas ${puladas.length} lições`} para "pendente"? As lições que você fez de verdade continuam concluídas.`, { ok: 'Desfazer' })) return;
+            store.undoCheckpoint(unit.id, puladas.map((l) => l.id));
+            backgroundSync(true);
+            viewCourse(course.id);
+          } }, 'Desfazer')) : null,
         unit.lessons.map((lesson) => {
           const done = s.completed[lesson.id];
           const unlocked = lessonUnlocked(course, lesson.id);
@@ -365,13 +377,14 @@ function viewCourse(courseId) {
           h('span', { class: 'l-status' }, ic(done ? 'check' : unlocked ? 'play' : 'lock', 14)),
           h('div', {}, h('div', { class: 'l-title' }, lesson.title),
             h('div', { class: 'l-meta' }, h('span', {}, `${c.theory} teoria`), h('span', {}, `${c.practice} prática`), isCurrent ? h('span', { class: 'badge brand' }, 'próxima') : null)),
-          done ? h('span', { class: 'stars', 'aria-label': `${done.stars} de 3 estrelas` }, [1, 2, 3].map((i) => h('span', { class: i <= done.stars ? '' : 'off' }, ic('star', 14)))) : h('span', {}),
+          done && skippedLesson(s, lesson.id) ? h('span', { class: 'badge', title: 'Marcada pelo checkpoint, sem estudar a lição' }, 'pulada')
+            : done ? h('span', { class: 'stars', 'aria-label': `${done.stars} de 3 estrelas` }, [1, 2, 3].map((i) => h('span', { class: i <= done.stars ? '' : 'off' }, ic('star', 14)))) : h('span', {}),
           h('span', { class: 'chev' }, ic('chevronRight', 18)));
         }),
         h('button', { class: 'lesson-row checkpoint-row', disabled: !unitOpen, onclick: () => startCheckpoint(unit.id) },
           h('span', { class: 'l-status' }, ic(cp ? 'check' : 'flag', 14)),
           h('div', {}, h('div', { class: 'l-title' }, 'Checkpoint da unidade'),
-            h('div', { class: 'l-meta' }, h('span', {}, cp ? `aprovado com ${Math.round(cp.score * 100)}%` : unitDone ? 'teste a unidade inteira' : 'acerte 80% e pule a unidade'))),
+            h('div', { class: 'l-meta' }, h('span', {}, cp ? `aprovado com ${Math.round(cp.score * 100)}%` : unitDone ? 'teste a unidade inteira' : 'para quem já domina: acertar 80% marca TODAS as lições da unidade como concluídas'))),
           h('span', {}), h('span', { class: 'chev' }, ic('chevronRight', 18))),
       );
     };
@@ -385,7 +398,7 @@ function viewCourse(courseId) {
         h('p', { class: 'muted' }, course.description),
         h('div', { class: 'stat-row' },
           h('div', {}, h('strong', {}, new Set(course.units.map((u) => u.level)).size), h('span', {}, 'níveis')),
-          h('div', {}, h('strong', {}, `${p.done}/${p.total}`), h('span', {}, 'lições')),
+          h('div', {}, h('strong', {}, `${p.done}/${p.total}`), h('span', {}, p.skipped ? `lições (${p.skipped} puladas)` : 'lições')),
           h('div', {}, h('strong', {}, n.theory), h('span', {}, 'cards de teoria')),
           h('div', {}, h('strong', {}, n.practice), h('span', {}, 'exercícios práticos')),
           h('div', {}, h('strong', {}, `${p.pct}%`), h('span', {}, 'concluído'))),
@@ -916,6 +929,7 @@ function startSession({ title, items, mode, lessonId, unitId, interview, backHre
     footerReady = () => {};
     const secs = Math.round((Date.now() - startedAt) / 1000);
     const accuracy = totalExercises ? correctCount / totalExercises : 1;
+    const cargoAntes = careerOf(store.getState()).index;
     let xp = 0;
     let stars = null;
     let headline = 'Prática concluída';
@@ -935,7 +949,7 @@ function startSession({ title, items, mode, lessonId, unitId, interview, backHre
       xp = passed ? 30 : 5 + correctCount;
       if (passed) {
         store.passCheckpoint(unitId, accuracy);
-        findUnit(unitId).unit.lessons.forEach((l) => store.completeLesson(l.id, 1, { silent: true }));
+        findUnit(unitId).unit.lessons.forEach((l) => store.completeLesson(l.id, 1, { silent: true, via: 'checkpoint' }));
       }
     } else if (mode === 'interview') {
       const prob = interview;
@@ -955,12 +969,13 @@ function startSession({ title, items, mode, lessonId, unitId, interview, backHre
     } else {
       xp = 5 + correctCount * 2;
     }
-    const leveledUp = store.addXp(xp);
+    store.addXp(xp);
     feedbackFx('finish');
     const missions = settleMissions();
     const awards = checkAchievements();
     backgroundSync(true);
-    const lv = store.levelInfo(store.getState().xp);
+    const lv = careerOf(store.getState());
+    const leveledUp = lv.index > cargoAntes;   // promoção só por lições concluídas, nunca por XP de prática
 
     app.replaceChildren(h('div', { class: 'finish' }, h('div', { class: 'finish-card' },
       h('span', { class: 'eyebrow' }, modeLabel || 'Lição'),
@@ -971,7 +986,7 @@ function startSession({ title, items, mode, lessonId, unitId, interview, backHre
         h('div', { class: 'fstat' }, h('span', {}, 'XP ganho'), h('strong', { style: { color: 'var(--xp)' } }, `+${xp}`)),
         h('div', { class: 'fstat' }, h('span', {}, 'Precisão'), h('strong', {}, `${Math.round(accuracy * 100)}%`)),
         h('div', { class: 'fstat' }, h('span', {}, 'Tempo'), h('strong', {}, fmtTime(secs)))),
-      leveledUp ? h('div', { class: 'unlock' }, ic('trend', 20), h('span', {}, 'Você subiu de nível: ', h('strong', {}, lv.title))) : null,
+      leveledUp ? h('div', { class: 'unlock' }, ic('trend', 20), h('span', {}, 'Promoção: ', h('strong', {}, lv.title))) : null,
       missions.map((m) => h('div', { class: 'unlock' }, ic('check', 18), `Missão cumprida: ${m.text} (+${MISSION_REWARD} XP)`)),
       awards.map((a) => h('div', { class: 'unlock' }, ic(a.icon, 18), h('span', {}, 'Conquista: ', h('strong', {}, a.title)))),
       conceptCard,
@@ -995,8 +1010,11 @@ function startLesson(lessonId) {
   startSession({ title: lesson.title, items, mode: done ? 'practice' : 'lesson', lessonId, backHref: `#/curso/${course.id}` });
 }
 
-function startCheckpoint(unitId) {
+async function startCheckpoint(unitId) {
   const { course, unit } = findUnit(unitId);
+  const s = store.getState();
+  const pendentes = unit.lessons.filter((l) => !s.completed[l.id]).length;
+  if (pendentes && !await askConfirm(`O checkpoint é um teste para PULAR a unidade: se acertar 80%, as ${pendentes} lições pendentes de "${unit.title}" ficam marcadas como concluídas (aparecem como "puladas"). Para só treinar sem pular nada, use Praticar.`, { ok: 'Fazer o teste' })) return;
   const pool = unit.lessons.flatMap((l) => l.steps.map((step) => ({ step: withVariant(step), lessonId: l.id, stepIndex: step.uid, courseId: course.id })))
     .filter((it) => EXERCISE_TYPES.has(it.step.type));
   const code = shuffle(pool.filter((it) => ['sql', 'python'].includes(it.step.type))).slice(0, 4);
@@ -1048,11 +1066,13 @@ function viewPractice() {
       card('terminal', 'Playground', 'SQL e Python livres, com o banco de dados completo.', () => { location.hash = '#/playground'; }),
     ),
     h('section', { class: 'card' },
-      h('div', { class: 'card-title' }, h('h3', {}, 'Domínio por unidade'), h('span', { class: 'tiny faint' }, 'cai quando exercícios vencem ou você erra')),
+      h('div', { class: 'card-title' }, h('h3', {}, 'Memória por unidade'), h('span', { class: 'tiny faint' }, 'revisão espaçada')),
+      h('p', { class: 'tiny faint', style: { margin: '0 0 8px' } }, 'Quanto dos exercícios que você JÁ FEZ em cada unidade ainda está fresco na memória. Cai quando os exercícios vencem ou você erra. Não é a porcentagem concluída da unidade (essa aparece ao lado, em lições).'),
       units.length ? units.map(({ c, u, strength }) => h('div', { class: 'mastery', style: { '--track': trackVar(c.id) } },
-        h('span', { class: 'track-chip', style: { color: 'var(--ink)' } }, h('span', { class: 'dot' }), u.title),
+        h('span', { class: 'track-chip', style: { color: 'var(--ink)' } }, h('span', { class: 'dot' }), u.title,
+          h('span', { class: 'tiny faint', style: { marginLeft: '6px' } }, `${u.lessons.filter((l) => s.completed[l.id]).length}/${u.lessons.length} lições`)),
         h('div', { class: 'progress' }, h('div', { class: 'bar', style: { width: `${Math.round(strength * 100)}%` } })),
-        h('span', { class: 'small faint num', style: { textAlign: 'right' } }, `${Math.round(strength * 100)}%`)))
+        h('span', { class: 'small faint num', style: { textAlign: 'right' } }, `${Math.round(strength * 100)}% fresco`)))
         : h('p', { class: 'muted small' }, 'Conclua algumas lições para ver seu domínio aqui.')),
   );
 }
@@ -1489,9 +1509,11 @@ function segmented(options, value, onchange) {
   return h('div', { class: 'tabs' }, options.map(([v, label]) => h('button', { class: `tab ${value === v ? 'active' : ''}`, onclick: () => onchange(v) }, label)));
 }
 
+const TRACK_SHORT = { sql: 'SQL', python: 'Python', stats: 'Estatística', db: 'Bancos de Dados' };
+
 function viewProfile() {
   const s = store.getState();
-  const lv = store.levelInfo(s.xp);
+  const lv = careerOf(s);
   const days = [];
   for (let i = 83; i >= 0; i--) {
     const d = store.today(new Date(Date.now() - i * 86400000));
@@ -1512,9 +1534,10 @@ function viewProfile() {
       h('div', { class: 'stack', style: { gap: '8px' } },
         h('div', { class: 'spread' }, h('h2', {}, lv.title), h('span', { class: 'num', style: { color: 'var(--xp)', fontWeight: 600 } }, `${s.xp} XP`)),
         h('div', { class: 'progress lg' }, h('div', { class: 'bar', style: { width: `${Math.round(lv.progress * 100)}%`, background: 'var(--xp)' } })),
-        h('span', { class: 'small muted' }, lv.next ? `Faltam ${lv.toNext} XP para ${lv.next}` : 'Você alcançou o nível máximo.'))),
+        h('span', { class: 'small muted' }, lv.next ? `${lv.pts} pontos de lições estudadas · faltam ${lv.toNext} para ${lv.next}` : 'Você alcançou o cargo máximo.'),
+        h('span', { class: 'tiny faint' }, 'O cargo sobe só com lições estudadas até o fim (cada uma vale o seu nível, de 1 a 5). Lições puladas por checkpoint, prática e revisão não promovem; prática e revisão dão XP.'))),
     h('div', { class: 'tiles' },
-      h('div', { class: 'card tile' }, h('strong', {}, `${Object.keys(s.completed).length}/${totalLessons}`), h('span', {}, 'lições concluídas')),
+      h('div', { class: 'card tile' }, h('strong', {}, `${Object.keys(s.completed).length}/${totalLessons}`), h('span', {}, (() => { const n = COURSES.reduce((acc, c) => acc + courseProgress(c).skipped, 0); return n ? `lições concluídas (${n} puladas)` : 'lições concluídas'; })())),
       h('div', { class: 'card tile' }, h('strong', {}, `${accuracy}%`), h('span', {}, `de acerto em ${s.totals.answered} respostas`)),
       h('div', { class: 'card tile' }, h('strong', {}, s.totals.theoryRead), h('span', {}, 'cards de teoria estudados')),
       h('div', { class: 'card tile' }, h('strong', {}, `${ivSolved}/${INTERVIEW.length}`), h('span', {}, 'problemas de entrevista'))),
@@ -1525,14 +1548,21 @@ function viewProfile() {
         h('details', { class: 'panel', style: { marginTop: '10px' } }, h('summary', {}, ic('table', 15), 'Ver como tabela'),
           h('div', { class: 'panel-body' }, h('div', { class: 'table-wrap' }, h('table', {}, h('thead', {}, h('tr', {}, h('th', {}, 'Semana de'), h('th', {}, 'XP'))), h('tbody', {}, weeks.map((w) => h('tr', {}, h('td', {}, w.label), h('td', {}, w.xp))))))))),
       h('section', { class: 'card' },
-        h('div', { class: 'card-title' }, h('h3', {}, 'Acerto por trilha'), h('span', { class: 'tiny faint' }, '1ª tentativa')),
+        h('div', { class: 'card-title' }, h('h3', {}, 'Progresso por trilha'), h('span', { class: 'tiny faint' }, 'lições concluídas')),
+        COURSES.map((c) => {
+          const p = courseProgress(c);
+          return h('div', { class: 'hbar', style: { '--track': trackVar(c.id) } },
+            h('span', { class: 'track-chip', style: { color: 'var(--ink)' } }, h('span', { class: 'dot' }), TRACK_SHORT[c.id] || c.title),
+            h('div', { class: 'track' }, h('div', { class: 'fillbar', style: { width: `${p.pct}%` } })),
+            h('span', { class: 'small num', style: { textAlign: 'right' } }, `${p.done}/${p.total}`));
+        }),
+        h('div', { class: 'card-title', style: { marginTop: '18px' } }, h('h3', {}, 'Acerto nas respostas'), h('span', { class: 'tiny faint' }, 'qualidade, não quantidade')),
+        h('p', { class: 'tiny faint', style: { margin: '0 0 6px' } }, 'Porcentagem de exercícios acertados na 1ª tentativa (lições, práticas e revisões). Não indica quanto do curso você concluiu.'),
         COURSES.map((c) => {
           const t = s.topics[c.id] || { correct: 0, answered: 0 };
-          const p = pct(t.correct, t.answered);
-          return h('div', { class: 'hbar', style: { '--track': trackVar(c.id) } },
-            h('span', { class: 'track-chip', style: { color: 'var(--ink)' } }, h('span', { class: 'dot' }), c.id === 'sql' ? 'SQL' : c.id === 'python' ? 'Python' : 'Estatística'),
-            h('div', { class: 'track' }, h('div', { class: 'fillbar', style: { width: `${p}%` } })),
-            h('span', { class: 'small num', style: { textAlign: 'right' } }, t.answered ? `${p}%` : '—'));
+          return h('div', { class: 'spread small', style: { padding: '3px 0' } },
+            h('span', { class: 'muted' }, TRACK_SHORT[c.id] || c.title),
+            h('span', { class: 'num' }, t.answered ? `${pct(t.correct, t.answered)}% de ${t.answered} respostas` : '—'));
         }),
         h('div', { class: 'card-title', style: { marginTop: '18px' } }, h('h3', {}, 'Atividade'), h('span', { class: 'tiny faint' }, `${store.daysStudied()} dias estudados`)),
         h('div', { class: 'heatmap', role: 'img', 'aria-label': 'Atividade diária nas últimas 12 semanas' }, days.map((d) => h('div', { class: `cell l${level(d.xp)}`, title: `${d.d}: ${d.xp} XP` }))))),
@@ -1620,7 +1650,7 @@ function viewProfile() {
 
 async function unlockAll() {
   if (!await askConfirm('Marcar todas as lições como concluídas (sem XP)? Útil para explorar o conteúdo.', { ok: 'Desbloquear' })) return;
-  for (const c of COURSES) for (const l of allLessons(c)) if (!store.getState().completed[l.id]) store.completeLesson(l.id, 3, { silent: true });
+  for (const c of COURSES) for (const l of allLessons(c)) if (!store.getState().completed[l.id]) store.completeLesson(l.id, 3, { silent: true, via: 'professor' });
   location.hash = '#/';
 }
 

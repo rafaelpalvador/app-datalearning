@@ -43,7 +43,8 @@ function defaults() {
   return {
     xp: 0,
     dailyGoal: 30,
-    completed: {},     // lessonId -> { at, stars, bestMistakes }
+    completed: {},     // lessonId -> { at, stars, bestMistakes, via? }
+    removed: {},       // lessonId ou 'cp:unitId' -> quando foi desmarcado (para a sincronização não trazer de volta)
     checkpoints: {},   // unitId -> { at, score }
     mistakes: [],      // [{ lessonId, stepIndex (identificador estável do passo), at }]
     srs: {},           // 'lessonId#uid' -> { ease, interval, due, reps, lapses }
@@ -125,14 +126,18 @@ export function addXp(amount) {
 
 export const daysStudied = () => Object.keys(getState().history).length;
 
-export function completeLesson(lessonId, mistakes, { silent = false } = {}) {
+// via: 'checkpoint' quando a lição foi marcada por um checkpoint aprovado (pulada, não estudada).
+// Ao fazer a lição de verdade depois, a marca de "pulada" sai.
+export function completeLesson(lessonId, mistakes, { silent = false, via = null } = {}) {
   const s = getState();
   const stars = mistakes === 0 ? 3 : mistakes <= 2 ? 2 : 1;
   const prev = s.completed[lessonId];
+  const pulada = via ? (!prev || !!prev.via) : false;
   s.completed[lessonId] = {
     at: prev?.at ?? Date.now(),
     stars: Math.max(stars, prev?.stars ?? 0),
     bestMistakes: Math.min(mistakes, prev?.bestMistakes ?? Infinity),
+    ...(pulada ? { via: prev?.via || via } : {}),
   };
   if (!silent) {
     s.daily.lessons += 1;
@@ -144,6 +149,27 @@ export function completeLesson(lessonId, mistakes, { silent = false } = {}) {
 
 export function passCheckpoint(unitId, score) {
   getState().checkpoints[unitId] = { at: Date.now(), score };
+  save();
+}
+
+/** A lição foi só "pulada" por um checkpoint? (inclui marcações feitas antes da versão 2.2, sem o campo via) */
+export function isSkipped(entry, checkpointAt) {
+  if (!entry) return false;
+  if (entry.via) return true;   // 'checkpoint' ou 'professor' (desbloquear tudo)
+  return !!checkpointAt && entry.bestMistakes === 1 && entry.stars === 2 && Math.abs((entry.at || 0) - checkpointAt) < 120000;
+}
+
+/** Desfaz um checkpoint: as lições que ele marcou voltam a ficar pendentes (em todos os aparelhos). */
+export function undoCheckpoint(unitId, lessonIds) {
+  const s = getState();
+  const cp = s.checkpoints[unitId];
+  const now = Date.now();
+  s.removed ||= {};
+  for (const id of lessonIds) {
+    if (isSkipped(s.completed[id], cp?.at)) { delete s.completed[id]; s.removed[id] = now; }
+  }
+  delete s.checkpoints[unitId];
+  s.removed[`cp:${unitId}`] = now;
   save();
 }
 
@@ -480,8 +506,16 @@ export function mergeSynced(remote) {
   const completed = { ...(remote.completed || {}) };
   for (const [id, c] of Object.entries(local.completed || {})) {
     const r = completed[id];
-    completed[id] = r ? { at: Math.min(c.at ?? Infinity, r.at ?? Infinity), stars: Math.max(c.stars || 0, r.stars || 0), bestMistakes: Math.min(c.bestMistakes ?? Infinity, r.bestMistakes ?? Infinity) } : c;
+    if (!r) { completed[id] = c; continue; }
+    const ambasPuladas = !!c.via && !!r.via;
+    completed[id] = { at: Math.min(c.at ?? Infinity, r.at ?? Infinity), stars: Math.max(c.stars || 0, r.stars || 0), bestMistakes: Math.min(c.bestMistakes ?? Infinity, r.bestMistakes ?? Infinity), ...(ambasPuladas ? { via: c.via } : {}) };
   }
+  // desmarcações (checkpoint desfeito) valem sobre marcações mais antigas
+  const removed = { ...(remote.removed || {}) };
+  for (const [k, t] of Object.entries(local.removed || {})) removed[k] = Math.max(t, removed[k] || 0);
+  s.removed = removed;
+  const pareceSkip = (c) => !!c.via || (c.stars === 2 && c.bestMistakes === 1);   // lição estudada de verdade nunca é apagada
+  for (const [id, t] of Object.entries(removed)) if (!id.startsWith('cp:') && completed[id] && (completed[id].at || 0) <= t && pareceSkip(completed[id])) delete completed[id];
   s.completed = completed;
 
   const checkpoints = { ...(remote.checkpoints || {}) };
@@ -489,6 +523,7 @@ export function mergeSynced(remote) {
     const r = checkpoints[id];
     checkpoints[id] = r ? { at: Math.min(c.at, r.at), score: Math.max(c.score || 0, r.score || 0) } : c;
   }
+  for (const [k, t] of Object.entries(removed)) if (k.startsWith('cp:') && checkpoints[k.slice(3)] && checkpoints[k.slice(3)].at <= t) delete checkpoints[k.slice(3)];
   s.checkpoints = checkpoints;
 
   const interview = { ...(remote.interview || {}) };

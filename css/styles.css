@@ -266,6 +266,8 @@ input:focus, textarea:focus, select:focus { outline: none; border-color: var(--i
 .stars .off { color: var(--surface-3); }
 .lesson-row .chev { color: var(--ink-3); }
 .checkpoint-row .l-status { border-style: dashed; }
+.skip-note { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 10px 14px; margin: 0 12px 8px; border-radius: 10px; background: color-mix(in srgb, var(--warn, #b45309) 10%, transparent); color: var(--ink); }
+.skip-note > span { flex: 1 1 220px; }
 
 /* níveis da trilha */
 .level-section { display: flex; flex-direction: column; gap: 14px; }

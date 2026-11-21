@@ -1,6 +1,7 @@
 import { COURSES, allLessons } from './content/index.js';
 import { INTERVIEW, INTERVIEW_SQL, INTERVIEW_PY } from './content/interview.js';
 import * as store from './state.js';
+import { careerOf } from './career.js';
 
 // ───────────── Missões diárias (3 por dia, sorteadas de forma determinística pela data)
 const MISSION_POOL = [
@@ -66,8 +67,8 @@ export const ACHIEVEMENTS = [
   { id: 'days7', icon: 'calendar', title: 'Constância', desc: 'Estude em 7 dias diferentes', test: () => store.daysStudied() >= 7 },
   { id: 'days30', icon: 'calendar', title: 'Hábito formado', desc: 'Estude em 30 dias diferentes', test: () => store.daysStudied() >= 30 },
   { id: 'theory50', icon: 'reader', title: 'Leitor voraz', desc: 'Estude 50 cards de teoria', test: (s) => s.totals.theoryRead >= 50 },
-  { id: 'lvl4', icon: 'trend', title: 'Promovido a Pleno', desc: 'Alcance o nível Analista Pleno I', test: (s) => store.levelInfo(s.xp).index >= 4 },
-  { id: 'lvl8', icon: 'crown', title: 'Especialista', desc: 'Alcance o nível Especialista em Dados', test: (s) => store.levelInfo(s.xp).index >= 8 },
+  { id: 'lvl4', icon: 'trend', title: 'Promovido a Pleno', desc: 'Alcance o nível Analista Pleno I', test: (s) => careerOf(s).index >= 4 },
+  { id: 'lvl8', icon: 'crown', title: 'Especialista', desc: 'Alcance o nível Especialista em Dados', test: (s) => careerOf(s).index >= 8 },
   { id: 'perfect', icon: 'target', title: 'Perfeccionista', desc: 'Termine 5 lições sem errar', test: (s) => s.totals.perfectLessons >= 5 },
   { id: 'combo15', icon: 'spark', title: 'Mira certeira', desc: 'Acerte 15 exercícios seguidos', test: (s) => s.totals.maxCombo >= 15 },
   { id: 'joins', icon: 'link', title: 'Mestre dos JOINs', desc: 'Conclua a unidade de JOINs', test: () => unitDone('sql-u4') },
