@@ -1,6 +1,6 @@
 {
   "name": "datalingo",
-  "version": "2.2.3",
+  "version": "2.2.4",
   "description": "Datum: aprenda SQL, Python e estatística para análise de dados",
   "scripts": {
     "start": "npx --yes http-server -c-1 -p 8080 .",
@@ -93,7 +93,8 @@
     "linux": {
       "target": [
         "AppImage",
-        "deb"
+        "deb",
+        "pacman"
       ],
       "icon": "assets/icon.png",
       "category": "Education",
@@ -108,6 +109,14 @@
         "libgtk-3-0",
         "libxss1",
         "libasound2"
+      ]
+    },
+    "pacman": {
+      "depends": [
+        "gtk3",
+        "nss",
+        "alsa-lib",
+        "libxss"
       ]
     }
   },

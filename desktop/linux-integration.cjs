@@ -8,7 +8,17 @@ const path = require('node:path');
 
 function integrarAppImage() {
   const appImage = process.env.APPIMAGE;
-  if (process.platform !== 'linux' || !appImage || !app.isPackaged) return;
+  if (process.platform !== 'linux' || !app.isPackaged) return;
+  if (!appImage) {
+    // instalado como pacote: remove um atalho antigo do AppImage que não existe mais (ele esconderia o do pacote)
+    try {
+      const dados = process.env.XDG_DATA_HOME || path.join(os.homedir(), '.local', 'share');
+      const arq = path.join(dados, 'applications', 'datum.desktop');
+      const alvo = fs.existsSync(arq) && (fs.readFileSync(arq, 'utf8').match(/^TryExec=(.+)$/m) || [])[1];
+      if (alvo && !fs.existsSync(alvo)) fs.unlinkSync(arq);
+    } catch { /* ignora */ }
+    return;
+  }
   try {
     const dados = process.env.XDG_DATA_HOME || path.join(os.homedir(), '.local', 'share');
     const dirApps = path.join(dados, 'applications');

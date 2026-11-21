@@ -92,7 +92,7 @@ jobs:
         with: { name: Datum-Windows, path: release/*.exe }
 
   linux:
-    name: Linux (AppImage + .deb)
+    name: Linux (AppImage + .deb + pacman)
     needs: [validate, pyodide]
     runs-on: ubuntu-latest
     steps:
@@ -103,13 +103,15 @@ jobs:
         with: { name: pyodide, path: vendor/pyodide }
       - run: npm ci
       - run: node scripts/vendor-pglite.mjs
-      - run: npx electron-builder --linux AppImage deb --x64 --publish never
+      - run: sudo apt-get update && sudo apt-get install -y libarchive-tools   # bsdtar, para o pacote do Arch
+      - run: npx electron-builder --linux AppImage deb pacman --x64 --publish never
       - uses: actions/upload-artifact@v4
         with:
           name: Datum-Linux
           path: |
             release/*.AppImage
             release/*.deb
+            release/*.pacman
 
   release:
     name: Publicar release

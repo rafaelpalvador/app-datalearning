@@ -1825,6 +1825,7 @@ function updatesCard() {
           const off = up.onProgress(({ p, got, total, stage }) => {
             bar.style.width = `${Math.round(p * 100)}%`;
             if (stage === 'senha') { prog.lastChild.textContent = 'Download concluído. Digite a sua senha na janela do sistema para instalar.'; return; }
+            if (stage === 'appimage') { prog.lastChild.textContent = 'O pacote não pôde ser instalado; baixando a versão AppImage...'; return; }
             prog.lastChild.textContent = total ? `Baixando ${fmtMB(got)} de ${fmtMB(total)}` : `Baixando ${fmtMB(got)}`;
           });
           const res = await up.install();
@@ -1839,7 +1840,7 @@ function updatesCard() {
     }, ic('download', 15), label);
     put(status,
       h('div', { class: 'unlock', style: { margin: 0 } }, ic('spark', 18), h('span', {}, 'Nova versão disponível: ', h('strong', {}, info.latest), ` (você tem ${info.current})`)),
-      info.asset?.size && info.canInstall ? h('span', { class: 'tiny faint' }, `Download de ${fmtMB(info.asset.size)}`) : null,
+      info.asset?.size && info.canInstall ? h('span', { class: 'tiny faint' }, `Download de ${fmtMB(info.asset.size)}${info.plano?.motivo ? ` · ${info.plano.motivo}` : ''}`) : null,
       h('div', { class: 'row' }, btn, h('button', { class: 'btn ghost sm', onclick: () => up.openPage() }, 'Ver novidades')),
       prog);
   };

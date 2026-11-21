@@ -86,6 +86,8 @@ chmod +x ~/Aplicativos/Datum-*-linux-x86_64.AppImage
 ```
 Na primeira abertura, o Datum se coloca no **menu de aplicativos** (com ícone). A partir daí, abra pelo menu e atualize pelo próprio app: nada mais de terminal.
 
+Prefere um pacote do sistema? Há também o `Datum-*-linux-x64.pacman`: `sudo pacman -U Datum-*-linux-x64.pacman`. Nesse caso, a atualização pelo app pede a sua senha numa janela do sistema.
+
 **.deb** (Ubuntu, Debian, Mint, Pop!_OS):
 ```bash
 sudo apt install ./Datum-*-linux-amd64.deb
@@ -95,7 +97,8 @@ O Datum aparece no menu de aplicativos, em *Educação*.
 ### Atualizar no Linux (pelo próprio app)
 Menu **Datum → Buscar atualizações** (ou Perfil → Atualizações do app) → **Atualizar agora**. Só é preciso instalar pelo terminal na primeira vez.
 - **AppImage:** o app baixa o AppImage novo, troca o arquivo atual por ele e reabre sozinho. Não pede senha (a pasta onde o AppImage está precisa permitir gravação, como `~/Aplicativos` ou `~/Downloads`).
-- **.deb:** o app baixa o pacote e abre a **janela de senha do sistema** (a mesma das atualizações do Ubuntu); depois de digitar a senha, instala e reabre.
+- **.deb / pacote do Arch (.pacman):** o app baixa o pacote e abre a **janela de senha do sistema**; depois de digitar a senha, instala e reabre.
+- **Qualquer outro jeito de instalação** (ou se o pacote não puder ser instalado): o app instala a versão nova como AppImage em `~/Aplicativos`, coloca no menu e abre. Sem terminal e sem senha.
 O app também procura versões novas sozinho ao abrir e a cada 6 horas.
 
 ## 🤖 Ativar o tutor com a sua IA
