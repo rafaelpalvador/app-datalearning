@@ -5,7 +5,7 @@ import { PG_SCHEMA_DOC } from './content/pg-dataset.js';
 import { pgRun, pgEvaluate, pgWarm } from './engines/pg-client.js';
 import { withVariant } from './content/helpers.js';
 import * as store from './state.js';
-import { careerOf, skippedLesson } from './career.js';
+import { careerOf, skippedLesson, trackCareer, trackCareers } from './career.js';
 import { renderMarkdown, inline, esc, highlight } from './markdown.js';
 import { freshDb, runQuery, evaluateSql, initSql, createDb, friendlySqlError } from './engines/sql-engine.js';
 import { runPython, friendlyPyError, cancelPython } from './engines/python-engine.js';
@@ -275,11 +275,12 @@ function trackCard(c) {
   const p = courseProgress(c);
   const n = courseCounts(c);
   return h('a', { class: 'card track-card', href: `#/curso/${c.id}`, style: { '--track': trackVar(c.id) } },
-    h('div', { class: 'spread' }, h('span', { class: 'track-icon' }, ic(c.icon, 21)), h('span', { class: 'small faint num' }, `${p.pct}%`)),
+    h('div', { class: 'spread' }, h('span', { class: 'track-icon' }, ic(c.icon, 21)), h('span', { class: 'badge', title: 'Seu cargo nesta trilha' }, trackCareer(store.getState(), c.id).rank)),
     h('div', { class: 'stack', style: { gap: '4px' } }, h('h3', {}, c.title), h('p', { class: 'small muted clamp-3' }, c.description)),
+    h('div', { class: 'spread tiny faint' }, h('span', {}, `${p.done}/${p.total} lições${p.skipped ? ` (${p.skipped} puladas)` : ''}`), h('span', { class: 'num' }, `${p.pct}%`)),
     h('div', { class: 'progress' }, h('div', { class: 'bar', style: { width: `${p.pct}%` } })),
     h('div', { class: 'track-meta' },
-      h('span', {}, ic('layers', 14), '4 níveis'),
+      h('span', {}, ic('layers', 14), `${new Set(c.units.map((u) => u.level)).size} níveis`),
       h('span', {}, ic('book', 14), `${n.lessons} lições`),
       h('span', {}, ic('reader', 14), `${n.theory} teoria`),
       h('span', {}, ic('code', 14), `${n.practice} prática`)),
@@ -396,6 +397,14 @@ function viewCourse(courseId) {
       h('div', { class: 'stack', style: { gap: '8px' } },
         h('h1', {}, course.title),
         h('p', { class: 'muted' }, course.description),
+        (() => {
+          const tc = trackCareer(s, course.id);
+          return h('div', { class: 'track-role' },
+            h('span', { class: 'eyebrow' }, 'Seu cargo nesta trilha'),
+            h('strong', {}, tc.title),
+            h('div', { class: 'progress' }, h('div', { class: 'bar', style: { width: `${Math.round(tc.progress * 100)}%` } })),
+            h('span', { class: 'tiny faint' }, tc.next ? `${tc.pct}% da trilha estudada · faltam ${tc.toNext} ${tc.toNext === 1 ? 'ponto' : 'pontos'} para ${tc.next}` : 'Topo da trilha alcançado'));
+        })(),
         h('div', { class: 'stat-row' },
           h('div', {}, h('strong', {}, new Set(course.units.map((u) => u.level)).size), h('span', {}, 'níveis')),
           h('div', {}, h('strong', {}, `${p.done}/${p.total}`), h('span', {}, p.skipped ? `lições (${p.skipped} puladas)` : 'lições')),
@@ -930,6 +939,8 @@ function startSession({ title, items, mode, lessonId, unitId, interview, backHre
     const secs = Math.round((Date.now() - startedAt) / 1000);
     const accuracy = totalExercises ? correctCount / totalExercises : 1;
     const cargoAntes = careerOf(store.getState()).index;
+    const trilhaSessao = lessonId ? findLesson(lessonId)?.course?.id : unitId ? findUnit(unitId)?.course?.id : null;
+    const trilhaAntes = trilhaSessao ? trackCareer(store.getState(), trilhaSessao).index : 0;
     let xp = 0;
     let stars = null;
     let headline = 'Prática concluída';
@@ -976,6 +987,8 @@ function startSession({ title, items, mode, lessonId, unitId, interview, backHre
     backgroundSync(true);
     const lv = careerOf(store.getState());
     const leveledUp = lv.index > cargoAntes;   // promoção só por lições concluídas, nunca por XP de prática
+    const tcDepois = trilhaSessao ? trackCareer(store.getState(), trilhaSessao) : null;
+    const promovidoTrilha = tcDepois && tcDepois.index > trilhaAntes;
 
     app.replaceChildren(h('div', { class: 'finish' }, h('div', { class: 'finish-card' },
       h('span', { class: 'eyebrow' }, modeLabel || 'Lição'),
@@ -986,7 +999,8 @@ function startSession({ title, items, mode, lessonId, unitId, interview, backHre
         h('div', { class: 'fstat' }, h('span', {}, 'XP ganho'), h('strong', { style: { color: 'var(--xp)' } }, `+${xp}`)),
         h('div', { class: 'fstat' }, h('span', {}, 'Precisão'), h('strong', {}, `${Math.round(accuracy * 100)}%`)),
         h('div', { class: 'fstat' }, h('span', {}, 'Tempo'), h('strong', {}, fmtTime(secs)))),
-      leveledUp ? h('div', { class: 'unlock' }, ic('trend', 20), h('span', {}, 'Promoção: ', h('strong', {}, lv.title))) : null,
+      promovidoTrilha ? h('div', { class: 'unlock' }, ic('trend', 20), h('span', {}, 'Promoção na trilha: ', h('strong', {}, tcDepois.title))) : null,
+      leveledUp ? h('div', { class: 'unlock' }, ic('trend', 20), h('span', {}, 'Promoção no cargo geral: ', h('strong', {}, lv.title))) : null,
       missions.map((m) => h('div', { class: 'unlock' }, ic('check', 18), `Missão cumprida: ${m.text} (+${MISSION_REWARD} XP)`)),
       awards.map((a) => h('div', { class: 'unlock' }, ic(a.icon, 18), h('span', {}, 'Conquista: ', h('strong', {}, a.title)))),
       conceptCard,
@@ -1532,10 +1546,18 @@ function viewProfile() {
     h('section', { class: 'card level-card' },
       h('span', { class: 'level-num' }, lv.index),
       h('div', { class: 'stack', style: { gap: '8px' } },
+        h('span', { class: 'eyebrow' }, 'Cargo geral (todas as trilhas)'),
         h('div', { class: 'spread' }, h('h2', {}, lv.title), h('span', { class: 'num', style: { color: 'var(--xp)', fontWeight: 600 } }, `${s.xp} XP`)),
         h('div', { class: 'progress lg' }, h('div', { class: 'bar', style: { width: `${Math.round(lv.progress * 100)}%`, background: 'var(--xp)' } })),
         h('span', { class: 'small muted' }, lv.next ? `${lv.pts} pontos de lições estudadas · faltam ${lv.toNext} para ${lv.next}` : 'Você alcançou o cargo máximo.'),
         h('span', { class: 'tiny faint' }, 'O cargo sobe só com lições estudadas até o fim (cada uma vale o seu nível, de 1 a 5). Lições puladas por checkpoint, prática e revisão não promovem; prática e revisão dão XP.'))),
+    h('section', { class: 'card' },
+      h('div', { class: 'card-title' }, h('h3', {}, 'Cargo por trilha'), h('span', { class: 'tiny faint' }, 'pelo que você estudou em cada curso')),
+      h('div', { class: 'role-grid' }, trackCareers(s).map((tc) => h('a', { class: 'role-card', href: `#/curso/${tc.courseId}`, style: { '--track': trackVar(tc.courseId) } },
+        h('span', { class: 'eyebrow' }, tc.area),
+        h('strong', {}, tc.rank),
+        h('div', { class: 'progress' }, h('div', { class: 'bar', style: { width: `${Math.round(tc.progress * 100)}%` } })),
+        h('span', { class: 'tiny faint' }, tc.next ? `${tc.pct}% estudado · próximo: ${tc.next}` : `${tc.pct}% estudado · topo`))))),
     h('div', { class: 'tiles' },
       h('div', { class: 'card tile' }, h('strong', {}, `${Object.keys(s.completed).length}/${totalLessons}`), h('span', {}, (() => { const n = COURSES.reduce((acc, c) => acc + courseProgress(c).skipped, 0); return n ? `lições concluídas (${n} puladas)` : 'lições concluídas'; })())),
       h('div', { class: 'card tile' }, h('strong', {}, `${accuracy}%`), h('span', {}, `de acerto em ${s.totals.answered} respostas`)),

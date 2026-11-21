@@ -62,3 +62,52 @@ export function careerInfo(pts = 0) {
     toNext: next ? next.pts - pts : 0,
   };
 }
+
+// ───────────── Cargo por trilha
+// Cada trilha tem a sua escada, medida pela fração dos pontos da trilha que você estudou.
+export const TRACK_ROLE = { sql: 'SQL', python: 'Python para dados', stats: 'Estatística', db: 'Bancos de Dados' };
+export const TRACK_RANKS = [
+  { pct: 0, title: 'Estagiário' },
+  { pct: 8, title: 'Júnior I' },
+  { pct: 18, title: 'Júnior II' },
+  { pct: 30, title: 'Pleno I' },
+  { pct: 42, title: 'Pleno II' },
+  { pct: 56, title: 'Sênior I' },
+  { pct: 72, title: 'Sênior II' },
+  { pct: 90, title: 'Especialista' },
+];
+
+export function trackCareer(state, courseId) {
+  const course = COURSES.find((c) => c.id === courseId);
+  let total = 0;
+  let pts = 0;
+  for (const u of course?.units || []) {
+    for (const l of u.lessons) {
+      const peso = u.level || 1;
+      total += peso;
+      if (state.completed?.[l.id] && !skippedLesson(state, l.id)) pts += peso;
+    }
+  }
+  const pct = total ? (pts / total) * 100 : 0;
+  let i = 0;
+  while (i + 1 < TRACK_RANKS.length && pct >= TRACK_RANKS[i + 1].pct) i++;
+  const cur = TRACK_RANKS[i];
+  const next = TRACK_RANKS[i + 1];
+  const ptsNext = next ? Math.ceil((next.pct / 100) * total) : total;
+  const ptsCur = Math.ceil((cur.pct / 100) * total);
+  return {
+    courseId,
+    area: TRACK_ROLE[courseId] || course?.title || courseId,
+    index: i + 1,
+    rank: cur.title,
+    title: `${cur.title} em ${TRACK_ROLE[courseId] || course?.title}`,
+    pts,
+    total,
+    pct: Math.round(pct),
+    next: next?.title ?? null,
+    toNext: next ? Math.max(0, ptsNext - pts) : 0,
+    progress: next ? Math.min(1, (pts - ptsCur) / Math.max(1, ptsNext - ptsCur)) : 1,
+  };
+}
+
+export const trackCareers = (state) => COURSES.map((c) => trackCareer(state, c.id));
