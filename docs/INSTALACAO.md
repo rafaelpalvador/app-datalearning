@@ -77,6 +77,15 @@ chmod +x Datum-*-linux-x86_64.AppImage
 ```
 Se reclamar de FUSE no Ubuntu 22.04+: `sudo apt install libfuse2` (ou `libfuse2t64` no 24.04).
 
+**Arch Linux, Manjaro, EndeavourOS** (e outras sem dpkg): use o **AppImage**.
+```bash
+sudo pacman -S --needed fuse2        # o AppImage precisa da libfuse 2 (só uma vez)
+mkdir -p ~/Aplicativos && mv ~/Downloads/Datum-*-linux-x86_64.AppImage ~/Aplicativos/
+chmod +x ~/Aplicativos/Datum-*-linux-x86_64.AppImage
+~/Aplicativos/Datum-*-linux-x86_64.AppImage
+```
+Na primeira abertura, o Datum se coloca no **menu de aplicativos** (com ícone). A partir daí, abra pelo menu e atualize pelo próprio app: nada mais de terminal.
+
 **.deb** (Ubuntu, Debian, Mint, Pop!_OS):
 ```bash
 sudo apt install ./Datum-*-linux-amd64.deb

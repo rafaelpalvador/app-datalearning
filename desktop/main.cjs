@@ -5,6 +5,7 @@ const { app, BrowserWindow, protocol, shell, Menu, nativeTheme } = require('elec
 const path = require('node:path');
 const fs = require('node:fs');
 const updater = require('./updater.cjs');
+const { integrarAppImage } = require('./linux-integration.cjs');
 
 const ROOT = path.join(__dirname, '..');
 const SCHEME = 'app';
@@ -71,6 +72,7 @@ app.on('second-instance', () => {
 });
 
 app.whenReady().then(() => {
+  integrarAppImage();
   protocol.handle(SCHEME, async (request) => {
     const url = new URL(request.url);
     const rel = decodeURIComponent(url.pathname).replace(/^\/+/, '') || 'index.html';

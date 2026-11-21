@@ -21,7 +21,8 @@ const appImagePath = () => process.env.APPIMAGE || null;
 function linuxKind() {
   if (process.platform !== 'linux' || !app.isPackaged) return null;
   if (appImagePath()) return 'appimage';
-  if (process.execPath.startsWith('/opt/') || process.execPath.startsWith('/usr/')) return 'deb';
+  // .deb só em distribuições com dpkg (Debian, Ubuntu, Mint...). No Arch, use o AppImage.
+  if ((process.execPath.startsWith('/opt/') || process.execPath.startsWith('/usr/')) && fs.existsSync('/usr/bin/dpkg')) return 'deb';
   return null;
 }
 const pkexecPath = () => ['/usr/bin/pkexec', '/bin/pkexec'].find((p) => fs.existsSync(p)) || null;
