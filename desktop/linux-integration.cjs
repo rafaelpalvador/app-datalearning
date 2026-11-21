@@ -6,6 +6,24 @@ const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
 
+// Remove atalhos de versões antigas do Datum (criados por Gear Lever, AppImageLauncher, appimaged...)
+// que apontam para um AppImage diferente do atual e que não existe mais. Só mexe na pasta do usuário.
+function limparAtalhosAntigos(dirApps, appImageAtual) {
+  let arquivos = [];
+  try { arquivos = fs.readdirSync(dirApps).filter((f) => f.endsWith('.desktop') && f !== 'datum.desktop'); } catch { return; }
+  for (const f of arquivos) {
+    const caminho = path.join(dirApps, f);
+    try {
+      const txt = fs.readFileSync(caminho, 'utf8');
+      if (!/^Name=Datum\b/m.test(txt)) continue;
+      const exec = (txt.match(/^Exec=(.+)$/m) || [])[1] || '';
+      const alvo = (exec.match(/"([^"]+\.AppImage)"/i) || exec.match(/(\S+\.AppImage)/i) || [])[1];
+      if (!alvo || alvo === appImageAtual) continue;
+      if (!fs.existsSync(alvo)) fs.unlinkSync(caminho);
+    } catch { /* ignora este arquivo */ }
+  }
+}
+
 function integrarAppImage() {
   const appImage = process.env.APPIMAGE;
   if (process.platform !== 'linux' || !app.isPackaged) return;
@@ -53,6 +71,7 @@ function integrarAppImage() {
       'StartupWMClass=Datum',
       '',
     ].join('\n');
+    limparAtalhosAntigos(dirApps, appImage);
     const arquivo = path.join(dirApps, 'datum.desktop');
     const atual = fs.existsSync(arquivo) ? fs.readFileSync(arquivo, 'utf8') : '';
     if (atual !== desktop) fs.writeFileSync(arquivo, desktop, { mode: 0o644 });
