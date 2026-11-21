@@ -1807,7 +1807,7 @@ function updatesCard() {
   const status = h('div', { class: 'stack', style: { gap: '10px' } });
   const card = h('section', { class: 'card stack', id: 'atualizacoes' },
     h('div', { class: 'card-title', style: { marginBottom: 0 } }, h('h3', {}, 'Atualizações do app'), h('span', { class: 'badge' }, `versão ${window.datalingoDesktop?.appVersion || '?'}`)),
-    h('p', { class: 'small muted' }, 'O Datum procura versões novas sozinho ao abrir. No Windows instalado, a atualização é baixada e instalada sem perder o progresso.'),
+    h('p', { class: 'small muted' }, 'O Datum procura versões novas sozinho ao abrir. No Windows e no Linux (AppImage ou .deb), a atualização é baixada e instalada pelo próprio app, sem perder o progresso.'),
     status);
 
   const showInfo = (info) => {
@@ -1822,8 +1822,9 @@ function updatesCard() {
         btn.disabled = true;
         if (info.canInstall) {
           prog.style.display = '';
-          const off = up.onProgress(({ p, got, total }) => {
+          const off = up.onProgress(({ p, got, total, stage }) => {
             bar.style.width = `${Math.round(p * 100)}%`;
+            if (stage === 'senha') { prog.lastChild.textContent = 'Download concluído. Digite a sua senha na janela do sistema para instalar.'; return; }
             prog.lastChild.textContent = total ? `Baixando ${fmtMB(got)} de ${fmtMB(total)}` : `Baixando ${fmtMB(got)}`;
           });
           const res = await up.install();

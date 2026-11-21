@@ -1,6 +1,8 @@
 // Atualizações do app de desktop a partir das Releases do GitHub.
 // Windows (instalado): baixa o instalador novo, roda em modo silencioso e reabre o app.
-// Windows portátil e Linux: avisa e abre a página de download.
+// Linux AppImage: baixa o AppImage novo, troca o arquivo atual por ele e reabre (sem senha).
+// Linux .deb: baixa o pacote e instala com a janela de senha do sistema (pkexec), depois reabre.
+// Windows portátil: avisa e abre a página de download.
 const { app, ipcMain, net, shell } = require('electron');
 const fs = require('node:fs');
 const os = require('node:os');
@@ -13,7 +15,27 @@ const PAGE = `https://github.com/${REPO}/releases/latest`;
 const CHECK_EVERY_MS = 6 * 60 * 60 * 1000;
 
 const isPortable = () => !!process.env.PORTABLE_EXECUTABLE_FILE;
-const canInstall = () => process.platform === 'win32' && !isPortable() && app.isPackaged;
+const appImagePath = () => process.env.APPIMAGE || null;
+
+// No Linux, como o Datum foi instalado? 'appimage' | 'deb' | null
+function linuxKind() {
+  if (process.platform !== 'linux' || !app.isPackaged) return null;
+  if (appImagePath()) return 'appimage';
+  if (process.execPath.startsWith('/opt/') || process.execPath.startsWith('/usr/')) return 'deb';
+  return null;
+}
+const pkexecPath = () => ['/usr/bin/pkexec', '/bin/pkexec'].find((p) => fs.existsSync(p)) || null;
+
+function canInstall() {
+  if (!app.isPackaged) return false;
+  if (process.platform === 'win32') return !isPortable();
+  const kind = linuxKind();
+  if (kind === 'appimage') {
+    try { fs.accessSync(path.dirname(appImagePath()), fs.constants.W_OK); return true; } catch { return false; }
+  }
+  if (kind === 'deb') return !!pkexecPath();
+  return false;
+}
 
 // compara versões "1.6.2" (ignora o "v" e sufixos)
 function newer(a, b) {
@@ -30,7 +52,10 @@ function pickAsset(assets) {
     const re = isPortable() ? /windows-portable\.exe$/i : /windows-instalador\.exe$/i;
     return assets.find((a) => re.test(a.name));
   }
-  if (process.platform === 'linux') return assets.find((a) => /\.AppImage$/i.test(a.name));
+  if (process.platform === 'linux') {
+    if (linuxKind() === 'deb') return assets.find((a) => /linux-(amd64|x64)\.deb$/i.test(a.name));
+    return assets.find((a) => /\.AppImage$/i.test(a.name));
+  }
   return null;
 }
 
@@ -53,6 +78,7 @@ async function check() {
     canInstall: canInstall() && !!asset,
     portable: isPortable(),
     platform: process.platform,
+    linux: linuxKind(),
   };
   return last;
 }
@@ -88,8 +114,41 @@ async function install(win) {
     shell.openExternal(info.page);
     return { ok: true, opened: true };
   }
+  const progresso = (p, got, total) => win?.webContents.send('update:progress', { p, got, total });
+
+  if (process.platform === 'linux' && linuxKind() === 'appimage') {
+    // baixa ao lado do AppImage atual e troca o arquivo (no Linux dá para substituir o arquivo em uso)
+    const atual = appImagePath();
+    const tmp = path.join(path.dirname(atual), `.${path.basename(atual)}.novo`);
+    await download(info.asset.url, tmp, progresso);
+    fs.chmodSync(tmp, 0o755);
+    fs.renameSync(tmp, atual);
+    app.relaunch({ execPath: atual, args: [] });
+    setTimeout(() => app.exit(0), 600);
+    return { ok: true, installing: true };
+  }
+
+  if (process.platform === 'linux' && linuxKind() === 'deb') {
+    const dest = path.join(os.tmpdir(), info.asset.name);
+    await download(info.asset.url, dest, progresso);
+    win?.webContents.send('update:progress', { p: 1, stage: 'senha' });
+    // pkexec mostra a janela de senha do próprio sistema; apt resolve dependências, dpkg é a alternativa
+    const instalador = fs.existsSync('/usr/bin/apt-get') ? ['/usr/bin/apt-get', 'install', '-y', dest] : ['/usr/bin/dpkg', '-i', dest];
+    const code = await new Promise((resolve) => {
+      const child = spawn(pkexecPath(), instalador, { stdio: 'ignore' });
+      child.on('error', () => resolve(-1));
+      child.on('exit', (c) => resolve(c));
+    });
+    if (code !== 0) {
+      return { ok: false, message: code === 126 || code === 127 ? 'A instalação foi cancelada na janela de senha.' : 'Não foi possível instalar o pacote. Tente de novo ou baixe pela página.' };
+    }
+    app.relaunch();
+    setTimeout(() => app.exit(0), 600);
+    return { ok: true, installing: true };
+  }
+
   const dest = path.join(os.tmpdir(), info.asset.name);
-  await download(info.asset.url, dest, (p, got, total) => win?.webContents.send('update:progress', { p, got, total }));
+  await download(info.asset.url, dest, progresso);
   // instalador NSIS em modo silencioso; --force-run reabre o Datum ao terminar
   const child = spawn(dest, ['/S', '--updated', '--force-run'], { detached: true, stdio: 'ignore' });
   child.unref();

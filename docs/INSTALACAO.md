@@ -83,6 +83,12 @@ sudo apt install ./Datum-*-linux-amd64.deb
 ```
 O Datum aparece no menu de aplicativos, em *Educação*.
 
+### Atualizar no Linux (pelo próprio app)
+Menu **Datum → Buscar atualizações** (ou Perfil → Atualizações do app) → **Atualizar agora**. Só é preciso instalar pelo terminal na primeira vez.
+- **AppImage:** o app baixa o AppImage novo, troca o arquivo atual por ele e reabre sozinho. Não pede senha (a pasta onde o AppImage está precisa permitir gravação, como `~/Aplicativos` ou `~/Downloads`).
+- **.deb:** o app baixa o pacote e abre a **janela de senha do sistema** (a mesma das atualizações do Ubuntu); depois de digitar a senha, instala e reabre.
+O app também procura versões novas sozinho ao abrir e a cada 6 horas.
+
 ## 🤖 Ativar o tutor com a sua IA
 
 1. Crie uma chave no provedor que você prefere. O jeito mais barato de começar é o **Gemini**, que tem cota gratuita: acesse aistudio.google.com/apikey, entre com sua conta Google e toque em **Create API key**.
