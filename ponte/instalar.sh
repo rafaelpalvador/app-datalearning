@@ -28,6 +28,12 @@ command -v openssl     >/dev/null || faltam+=(openssl)
 command -v notify-send >/dev/null || faltam+=(libnotify)
 command -v wl-copy     >/dev/null || faltam+=(wl-clipboard)
 command -v xclip       >/dev/null || faltam+=(xclip)
+# Janela que pergunta "Aceitar?" quando um aparelho desconhecido manda algo
+if [[ "${XDG_CURRENT_DESKTOP:-}" == *KDE* ]]; then
+    command -v kdialog >/dev/null || faltam+=(kdialog)
+else
+    command -v zenity  >/dev/null || command -v kdialog >/dev/null || faltam+=(zenity)
+fi
 if ((${#faltam[@]})); then
     echo "    Instalando: ${faltam[*]}"
     sudo pacman -S --needed --noconfirm "${faltam[@]}"

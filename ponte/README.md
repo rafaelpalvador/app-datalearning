@@ -37,7 +37,7 @@ Para desinstalar: `./instalar.sh --remover`.
 1. Instale o **LocalSend** pela Play Store.
 2. Deixe o celular no **mesmo Wi-Fi** do PC. Wi-Fi de visitante costuma isolar os aparelhos, e aí não funciona.
 3. Abra o LocalSend. O PC aparece na aba **Enviar** com o nome do computador.
-4. Mande qualquer coisa para o PC. No PC aparece uma notificação: toque em **Sempre deste aparelho**. Daí em diante esse celular não precisa mais de confirmação.
+4. Mande qualquer coisa para o PC. No PC abre uma janela perguntando se aceita: clique em **Sempre deste aparelho**. Daí em diante esse celular não precisa mais de confirmação. (Atalho: `ponte confiar honor` no terminal faz o mesmo.)
 5. **Só no Honor (MagicOS):** em Configurações → Bateria → Inicialização de apps, coloque o LocalSend em **gerenciar manualmente** e ative as três opções. Sem isso a MagicOS fecha o LocalSend e o PC não consegue mandar nada para o celular.
 6. **Para o PC mandar arquivos sem o celular perguntar:** por padrão o LocalSend do celular pede **Aceitar** a cada envio. Para os arquivos entrarem direto:
    - na aba **Enviar** do LocalSend, marque o PC como **favorito**;
@@ -141,7 +141,7 @@ O que muda em relação a casa:
 | "não respondeu" ao enviar do PC | O LocalSend do celular foi fechado. Abra-o e veja a configuração de bateria do Honor (passo 5). |
 | "Não consegui usar a porta 53317" | O LocalSend oficial está aberto no PC. Feche-o. |
 | O texto não vai para a área de transferência | Instale o `wl-clipboard` (Wayland) ou o `xclip` (X11). |
-| Nada pergunta nem avisa | Instale o `libnotify`. Sem ele, aparelhos desconhecidos são recusados por segurança. |
+| O celular fica em "Aguardando" | O PC está esperando você responder à janela "Aceitar?" (ela pode estar atrás de outras janelas). Para não perguntar mais, rode `ponte confiar honor`. Se nenhuma janela aparece, instale o `kdialog` (KDE) ou o `zenity`. |
 
 ## Como funciona e segurança
 

@@ -265,6 +265,56 @@ class TesteProtocolo(unittest.TestCase):
         self.assertEqual(self._subir(resp["sessionId"], "f", resp["files"]["f"], b"abc"), 403)
 
 
+class TestePergunta(unittest.TestCase):
+    """A pergunta "Aceitar?" usa janela (kdialog/zenity), com notificação só como último recurso."""
+
+    def _com_programas(self, scripts, desktop="KDE"):
+        import os
+        tmp = tempfile.mkdtemp()
+        for nome, corpo in scripts.items():
+            caminho = Path(tmp) / nome
+            caminho.write_text("#!/bin/sh\n" + corpo + "\n")
+            caminho.chmod(0o755)
+        antigo = (os.environ.get("PATH"), os.environ.get("XDG_CURRENT_DESKTOP"))
+        os.environ["PATH"] = tmp
+        os.environ["XDG_CURRENT_DESKTOP"] = desktop
+        try:
+            return ponte.Desktop().perguntar("Honor quer enviar um texto", "<oi> & tchau")
+        finally:
+            os.environ["PATH"] = antigo[0] or ""
+            if antigo[1] is None:
+                os.environ.pop("XDG_CURRENT_DESKTOP", None)
+            else:
+                os.environ["XDG_CURRENT_DESKTOP"] = antigo[1]
+
+    def test_kdialog(self):
+        self.assertEqual(self._com_programas({"kdialog": "exit 0"}), "aceitar")
+        self.assertEqual(self._com_programas({"kdialog": "exit 1"}), "sempre")
+        self.assertIsNone(self._com_programas({"kdialog": "exit 2"}))
+
+    def test_kdialog_recebe_texto_escapado(self):
+        import os
+        tmp = tempfile.mkdtemp()
+        saida = Path(tmp) / "args"
+        r = self._com_programas({"kdialog": f'for a in "$@"; do echo "$a"; done > {saida}; exit 0'})
+        self.assertEqual(r, "aceitar")
+        args = saida.read_text()
+        self.assertIn("&lt;oi&gt; &amp; tchau", args)
+        self.assertIn("Sempre deste aparelho", args)
+
+    def test_zenity_fora_do_kde(self):
+        self.assertEqual(self._com_programas({"zenity": "exit 0", "kdialog": "exit 2"}, "GNOME"), "aceitar")
+        self.assertEqual(self._com_programas({"zenity": 'echo "Sempre deste aparelho"; exit 1'}, "GNOME"), "sempre")
+        self.assertIsNone(self._com_programas({"zenity": "exit 1"}, "GNOME"))
+
+    def test_kdialog_quebrado_cai_para_notificacao(self):
+        r = self._com_programas({"kdialog": "exit 254", "notify-send": 'case "$*" in *--wait*) echo sempre;; esac'})
+        self.assertEqual(r, "sempre")
+
+    def test_sem_nada_recusa(self):
+        self.assertIsNone(self._com_programas({}))
+
+
 class TesteUtilidades(unittest.TestCase):
     def test_area_de_transferencia(self):
         class Area(DesktopFalso):

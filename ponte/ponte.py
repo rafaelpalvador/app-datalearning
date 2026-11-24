@@ -21,6 +21,7 @@ import contextlib
 import datetime as dt
 import fcntl
 import hashlib
+import html
 import http.client
 import http.server
 import ipaddress
@@ -44,7 +45,7 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-VERSAO = "0.2.0"
+VERSAO = "0.2.1"
 PROTOCOLO = "2.1"
 PORTA_PADRAO = 53317
 GRUPO_MULTICAST = "224.0.0.167"
@@ -232,19 +233,71 @@ class Desktop:
         return None
 
     def perguntar(self, titulo: str, corpo: str) -> str | None:
-        """Pergunta pela notificação. Devolve 'aceitar', 'sempre' ou None (recusou/sem resposta)."""
+        """Pergunta se aceita. Devolve 'aceitar', 'sempre' ou None (recusou/sem resposta).
+
+        Usa uma janela de diálogo (kdialog no KDE, zenity nos outros): ela fica
+        na tela até a resposta. Botões em notificação somem para o histórico em
+        poucos segundos no KDE, e o celular ficava esperando sem você ver.
+        """
         log.info("Pergunta: %s %s", titulo, corpo.replace("\n", " | "))
-        if not shutil.which("notify-send"):
-            log.warning("notify-send não encontrado: recusando %s (instale libnotify)", titulo)
+        texto = f"<b>{html.escape(titulo)}</b><br><br>{html.escape(corpo).replace(chr(10), '<br>')}"
+        kde = "KDE" in os.environ.get("XDG_CURRENT_DESKTOP", "").upper()
+        tentativas = []
+        if shutil.which("kdialog"):
+            tentativas.append("kdialog")
+        if shutil.which("zenity"):
+            tentativas.insert(0 if not kde else len(tentativas), "zenity")
+        if shutil.which("notify-send"):
+            tentativas.append("notify-send")
+        if not tentativas:
+            log.warning("Sem kdialog, zenity ou notify-send: recusando %s", titulo)
             return None
-        cmd = ["notify-send", "--app-name=Ponte", "--icon=document-receive",
-               f"--expire-time={ESPERA_PERGUNTA * 1000}",
-               "--action=aceitar=Aceitar", "--action=sempre=Sempre deste aparelho",
-               "--action=recusar=Recusar", "--wait", titulo, corpo]
-        try:
-            r = subprocess.run(cmd, capture_output=True, text=True, timeout=ESPERA_PERGUNTA)
-        except subprocess.TimeoutExpired:
-            return None
+        # Um aviso sonoro/visual chama a atenção para a janela.
+        if tentativas[0] != "notify-send" and shutil.which("notify-send"):
+            with contextlib.suppress(OSError, subprocess.SubprocessError):
+                subprocess.run(["notify-send", "--app-name=Ponte", "--icon=document-receive",
+                                titulo, "Responda na janela da Ponte."], capture_output=True, timeout=5)
+        for programa in tentativas:
+            try:
+                resposta = self._perguntar_com(programa, titulo, texto, corpo)
+            except FileNotFoundError:
+                continue
+            except subprocess.TimeoutExpired:
+                log.info("Sem resposta em %d s: recusado", ESPERA_PERGUNTA)
+                return None
+            except (OSError, subprocess.SubprocessError) as e:
+                log.warning("%s falhou: %s", programa, e)
+                continue
+            if resposta == "erro":
+                continue
+            log.info("Resposta: %s", resposta or "recusar")
+            return resposta
+        return None
+
+    @staticmethod
+    def _perguntar_com(programa: str, titulo: str, texto: str, corpo: str) -> str | None:
+        if programa == "kdialog":
+            r = subprocess.run(["kdialog", "--title", "Ponte", "--icon", "document-receive",
+                                "--yes-label", "Aceitar", "--no-label", "Sempre deste aparelho",
+                                "--cancel-label", "Recusar", "--yesnocancel", texto],
+                               capture_output=True, text=True, timeout=ESPERA_PERGUNTA)
+            return {0: "aceitar", 1: "sempre", 2: None}.get(r.returncode, "erro")
+        if programa == "zenity":
+            extra = "Sempre deste aparelho"
+            r = subprocess.run(["zenity", "--question", "--title=Ponte", "--icon=document-receive",
+                                f"--text={texto}", "--ok-label=Aceitar", "--cancel-label=Recusar",
+                                f"--extra-button={extra}", "--width=420"],
+                               capture_output=True, text=True, timeout=ESPERA_PERGUNTA)
+            if r.returncode == 0:
+                return "aceitar"
+            if r.stdout.strip() == extra:
+                return "sempre"
+            return None if r.returncode == 1 else "erro"
+        r = subprocess.run(["notify-send", "--app-name=Ponte", "--icon=document-receive",
+                            "--urgency=critical", "--action=aceitar=Aceitar",
+                            "--action=sempre=Sempre deste aparelho", "--action=recusar=Recusar",
+                            "--wait", titulo, corpo],
+                           capture_output=True, text=True, timeout=ESPERA_PERGUNTA)
         resposta = r.stdout.strip()
         return resposta if resposta in ("aceitar", "sempre") else None
 
