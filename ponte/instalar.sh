@@ -8,6 +8,7 @@ DIR="$(cd "$(dirname "$0")" && pwd)"
 BIN="$HOME/.local/bin/ponte"
 AUTOSTART="$HOME/.config/autostart/ponte.desktop"
 APP="$HOME/.local/share/applications/ponte-clipboard.desktop"
+APP_PRINCIPAL="$HOME/.local/share/applications/ponte.desktop"
 MENU="$HOME/.local/share/kio/servicemenus/ponte-enviar.desktop"
 PORTA=53317
 
@@ -15,7 +16,7 @@ parar() { pkill -f "ponte servidor" 2>/dev/null || true; }
 
 if [[ "${1:-}" == "--remover" ]]; then
     parar
-    rm -f "$BIN" "$AUTOSTART" "$APP" "$MENU"
+    rm -f "$BIN" "$AUTOSTART" "$APP" "$APP_PRINCIPAL" "$MENU"
     echo "Ponte removida. Configuração em ~/.config/ponte e dados em ~/.local/share/ponte foram mantidos."
     exit 0
 fi
@@ -48,6 +49,18 @@ Exec=$BIN servidor
 Icon=document-send
 X-GNOME-Autostart-enabled=true
 NoDisplay=true
+EOF
+
+# "Ponte" no menu de aplicativos: liga se estiver desligada e mostra o estado
+cat > "$APP_PRINCIPAL" <<EOF
+[Desktop Entry]
+Type=Application
+Name=Ponte
+Comment=Copiar, colar e enviar arquivos com o celular (LocalSend)
+Exec=$BIN abrir
+Icon=document-send
+Terminal=false
+Categories=Utility;Network;
 EOF
 
 # Entrada de menu usada para o atalho de teclado

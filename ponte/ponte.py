@@ -44,7 +44,7 @@ import uuid
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-VERSAO = "0.1.0"
+VERSAO = "0.2.0"
 PROTOCOLO = "2.1"
 PORTA_PADRAO = 53317
 GRUPO_MULTICAST = "224.0.0.167"
@@ -54,6 +54,7 @@ MAX_MENSAGEM = 16 * 1024
 MAX_JSON = 8 * 1024 * 1024
 PEDACO = 256 * 1024
 ESPERA_PERGUNTA = 90  # segundos para responder a notificação
+INTERVALO_ANUNCIO = 15  # segundos entre anúncios na rede (um pacote UDP pequeno)
 
 log = logging.getLogger("ponte")
 
@@ -195,15 +196,28 @@ class Desktop:
             cmd = ["xclip", "-selection", "clipboard", "-t", tipo, "-o"]
         return subprocess.run(cmd, capture_output=True, timeout=10).stdout
 
-    def notificar(self, titulo: str, corpo: str = "", pasta: Path | None = None) -> None:
-        """Aviso que não espera resposta. Com ``pasta``, oferece abri-la."""
+    def notificar(self, titulo: str, corpo: str = "", pasta: Path | None = None,
+                  substituir: str | None = None) -> str | None:
+        """Aviso que não espera resposta. Com ``pasta``, oferece abri-la.
+
+        Devolve o id da notificação; passar esse id em ``substituir`` troca o
+        aviso anterior em vez de empilhar outro (ex.: "Enviando…" → "Enviado").
+        """
         log.info("%s %s", titulo, corpo.replace("\n", " | "))
         if not shutil.which("notify-send"):
-            return
+            return None
         cmd = ["notify-send", "--app-name=Ponte", "--icon=document-send", titulo, corpo]
         if pasta is None:
-            subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-            return
+            # Espera o notify-send terminar: quem chama pode sair logo em seguida
+            # (atalho de teclado, Dolphin) e o aviso não pode se perder.
+            extra = ["--print-id"] + (["--replace-id", substituir] if substituir else [])
+            try:
+                r = subprocess.run(cmd + extra, capture_output=True, text=True, timeout=5)
+                if r.returncode != 0:  # notify-send antigo, sem --print-id
+                    r = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+                return r.stdout.strip() or None
+            except (OSError, subprocess.SubprocessError):
+                return None
 
         def esperar():
             try:
@@ -215,6 +229,7 @@ class Desktop:
                 pass
 
         threading.Thread(target=esperar, daemon=True).start()
+        return None
 
     def perguntar(self, titulo: str, corpo: str) -> str | None:
         """Pergunta pela notificação. Devolve 'aceitar', 'sempre' ou None (recusou/sem resposta)."""
@@ -524,7 +539,7 @@ class Ponte:
         return None
 
     def enviar(self, itens: list[dict], para: str | None = None, pin: str | None = None,
-               progresso: bool = False) -> tuple[str, int]:
+               progresso: bool = False, ao_aguardar=None) -> tuple[str, int]:
         """Envia itens ({nome, tamanho, tipo, caminho|dados, preview?}). Devolve (aparelho, enviados)."""
         if not itens:
             raise Erro("Nada para enviar.")
@@ -548,8 +563,11 @@ class Ponte:
             por_id[fid] = item
 
         rota = "/prepare-upload" + (f"?pin={urllib.parse.quote(pin)}" if pin else "")
+        log.info("Enviando %d item(ns) para %s (%s)", len(itens), alias, ip)
         if progresso:
             print(f"Aguardando {alias} aceitar…", file=sys.stderr)
+        if ao_aguardar:
+            ao_aguardar(alias)
         status, corpo = self.requisitar(ip, porta, proto, "POST", rota,
                                         {"info": self.info(), "files": arquivos}, fp=fp, timeout=300)
         if status == 204:
@@ -811,6 +829,11 @@ class Ponte:
     def _anunciar_inicio(self) -> None:
         for espera in (0.2, 2, 5):
             time.sleep(espera)
+            self.anunciar()
+        # Depois, repete de tempos em tempos: o celular que abrir o LocalSend
+        # mais tarde vê o PC em segundos, mesmo se o anúncio dele se perder no Wi-Fi.
+        while True:
+            time.sleep(INTERVALO_ANUNCIO)
             self.anunciar()
 
     def _escutar_multicast(self) -> None:
@@ -1107,25 +1130,76 @@ def cmd_servidor(app: Ponte, args) -> int:
 
 
 def _resultado_envio(app: Ponte, args, itens: list[dict]) -> int:
+    """Envia e avisa: no terminal por texto; pelo atalho ou Dolphin, por notificação."""
     interativo = sys.stderr.isatty()
-    try:
-        alias, n = app.enviar(itens, args.para, args.pin, progresso=interativo)
-    except Erro as e:
+    eh_texto = len(itens) == 1 and itens[0].get("preview") is not None
+    aviso: list[str | None] = [None]
+
+    def ao_aguardar(alias):
         if interativo:
-            print(f"Erro: {e}", file=sys.stderr)
+            return
+        o_que = "texto" if eh_texto else f"{len(itens)} arquivo(s)"
+        aviso[0] = app.desktop.notificar(f"Enviando {o_que} para {alias}…",
+                                         "Se o celular pedir, toque em Aceitar no LocalSend.")
+
+    def avisar(titulo, corpo=""):
+        if interativo:
+            print(f"{titulo}{': ' + corpo if corpo else ''}", file=sys.stderr)
         else:
-            app.desktop.notificar("Ponte: não enviado", str(e))
+            app.desktop.notificar(titulo, corpo, substituir=aviso[0])
+
+    try:
+        alias, n = app.enviar(itens, args.para, args.pin, progresso=interativo, ao_aguardar=ao_aguardar)
+    except Erro as e:
+        log.warning("Não enviado: %s", e)
+        avisar("Ponte: não enviado", str(e))
         return 1
     except (OSError, ssl.SSLError, http.client.HTTPException) as e:
-        msg = f"Falha de conexão: {e}"
-        print(msg, file=sys.stderr) if interativo else app.desktop.notificar("Ponte: não enviado", msg)
+        log.warning("Não enviado (conexão): %s", e)
+        avisar("Ponte: não enviado", f"Falha de conexão: {e}")
         return 1
-    if len(itens) == 1 and itens[0].get("preview") is not None:
-        texto = f"Texto enviado para {alias}"
+    if eh_texto:
+        avisar(f"Texto enviado para {alias}", "No celular, toque em Copiar na janela do LocalSend.")
     else:
-        texto = f"{n} arquivo(s) enviado(s) para {alias}"
-    print(texto, file=sys.stderr) if interativo else app.desktop.notificar(texto)
+        avisar(f"{n} arquivo(s) enviado(s) para {alias}")
+    log.info("Envio para %s concluído", alias)
     return 0
+
+
+def servidor_ligado(app: Ponte) -> bool:
+    try:
+        status, corpo = app.requisitar("127.0.0.1", app.porta, "https", "GET", "/info", timeout=2)
+        return status == 200 and json.loads(corpo).get("fingerprint") == app.fp
+    except (OSError, ssl.SSLError, http.client.HTTPException, ValueError, Erro):
+        return False
+
+
+def cmd_abrir(app: Ponte, args) -> int:
+    """O que roda ao clicar em "Ponte" no menu: liga se preciso e mostra como está."""
+    ligado = servidor_ligado(app)
+    if not ligado:
+        subprocess.Popen([sys.executable, os.path.abspath(sys.argv[0]), "servidor"],
+                         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                         start_new_session=True)
+        for _ in range(20):
+            time.sleep(0.25)
+            if servidor_ligado(app):
+                ligado = True
+                break
+    todos = app.registro.todos().values()
+    confiaveis = [d.get("alias", "?") for d in todos if d.get("confiavel")]
+    linhas = [f"Aparece no celular como \"{app.config['nome']}\".",
+              "De confiança: " + (", ".join(confiaveis) if confiaveis else "nenhum ainda"),
+              f"Arquivos recebidos vão para {app.pasta}"]
+    if ligado:
+        app.desktop.notificar("Ponte ligada", "\n".join(linhas))
+    else:
+        app.desktop.notificar("A Ponte não conseguiu ligar",
+                              f"Veja o motivo em {app.dir_dados / 'ponte.log'}. O LocalSend oficial "
+                              "aberto no PC usa a mesma porta.")
+    if sys.stderr.isatty():
+        print(("Ponte ligada.\n" if ligado else "A Ponte não ligou.\n") + "\n".join(linhas), file=sys.stderr)
+    return 0 if ligado else 1
 
 
 def cmd_enviar(app, args):
@@ -1227,6 +1301,7 @@ def main(argv=None) -> int:
         return sp
 
     sub.add_parser("servidor", help="fica ligado recebendo (o instalador inicia sozinho)").set_defaults(f=cmd_servidor)
+    sub.add_parser("abrir", help="liga a Ponte se estiver desligada e mostra o estado").set_defaults(f=cmd_abrir)
     sp = com_destino(sub.add_parser("enviar", help="envia arquivos ou pastas"))
     sp.add_argument("arquivos", nargs="+")
     sp.set_defaults(f=cmd_enviar)
@@ -1250,7 +1325,7 @@ def main(argv=None) -> int:
 
     args = p.parse_args(argv)
     dir_config, dir_dados = diretorios()
-    configurar_log(dir_dados, args.detalhado, arquivo=args.comando == "servidor")
+    configurar_log(dir_dados, args.detalhado, arquivo=True)
     try:
         app = Ponte(dir_config, dir_dados)
         return args.f(app, args)

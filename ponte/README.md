@@ -30,6 +30,8 @@ Para desinstalar: `./instalar.sh --remover`.
 
 > Não deixe o LocalSend oficial aberto no PC: os dois usam a mesma porta.
 
+**A Ponte não tem janela.** Ela fica ligada em segundo plano e fala com você só por notificações. Clicar em **Ponte** no menu de aplicativos liga a Ponte, se estiver desligada, e mostra uma notificação com o estado: o nome com que o PC aparece no celular, os aparelhos de confiança e a pasta dos recebidos.
+
 ## Configurar os celulares (Honor e Samsung)
 
 1. Instale o **LocalSend** pela Play Store.
@@ -37,7 +39,11 @@ Para desinstalar: `./instalar.sh --remover`.
 3. Abra o LocalSend. O PC aparece na aba **Enviar** com o nome do computador.
 4. Mande qualquer coisa para o PC. No PC aparece uma notificação: toque em **Sempre deste aparelho**. Daí em diante esse celular não precisa mais de confirmação.
 5. **Só no Honor (MagicOS):** em Configurações → Bateria → Inicialização de apps, coloque o LocalSend em **gerenciar manualmente** e ative as três opções. Sem isso a MagicOS fecha o LocalSend e o PC não consegue mandar nada para o celular.
-6. **Para o PC mandar arquivos sem o celular perguntar:** no LocalSend do celular, marque o PC como favorito e, em Configurações, ative o **salvamento rápido de favoritos**.
+6. **Para o PC mandar arquivos sem o celular perguntar:** por padrão o LocalSend do celular pede **Aceitar** a cada envio. Para os arquivos entrarem direto:
+   - na aba **Enviar** do LocalSend, marque o PC como **favorito**;
+   - em **Configurações → Receber**, ative o **salvamento rápido para favoritos**.
+
+   **Textos sempre abrem uma janela no celular**, mesmo de favoritos: é uma regra do LocalSend. Toque em **Copiar** nessa janela.
 
 ## Usar
 
@@ -58,6 +64,8 @@ O Android não deixa nenhum app ler o que você copiou sem você pedir, por isso
   ponte enviar video.mp4 -p samsung       # escolhe o aparelho (parte do nome basta)
   ```
 
+Ao enviar pelo atalho ou pelo Dolphin, aparece o aviso **"Enviando… para o Honor"**. Quando o celular recebe, o mesmo aviso vira **"enviado"**; se der errado, vira **"não enviado"**, com o motivo.
+
 O LocalSend precisa estar aberto ou em segundo plano no celular para receber.
 
 ### Com dois celulares
@@ -73,6 +81,7 @@ O atalho e o Dolphin passam a mandar para o Honor. Para o Samsung, use `-p samsu
 
 | Comando | O que faz |
 |---|---|
+| `ponte abrir` | Liga a Ponte, se estiver desligada, e mostra o estado (é o que o item "Ponte" do menu faz) |
 | `ponte servidor` | Fica ligado recebendo (o instalador já liga sozinho) |
 | `ponte enviar ARQUIVOS...` | Envia arquivos e pastas |
 | `ponte texto TEXTO` | Envia um texto |
@@ -126,8 +135,9 @@ O que muda em relação a casa:
 
 | Problema | O que fazer |
 |---|---|
-| O PC não aparece no celular | Confira o mesmo Wi-Fi e a porta 53317 liberada no firewall (`sudo ufw status`). No celular, toque no botão de atualizar da aba Enviar. |
+| O PC não aparece no celular | A Ponte se anuncia na rede a cada 15 segundos; espere um pouco ou toque em atualizar. Confira o mesmo Wi-Fi e a porta 53317 liberada no firewall (`sudo ufw status`). |
 | O celular não aparece no PC | Abra o LocalSend no celular e rode `ponte procurar`. |
+| Algo deu errado e você quer entender | Mande o arquivo `~/.local/share/ponte/ponte.log`: ele registra o que chegou e o que foi enviado. |
 | "não respondeu" ao enviar do PC | O LocalSend do celular foi fechado. Abra-o e veja a configuração de bateria do Honor (passo 5). |
 | "Não consegui usar a porta 53317" | O LocalSend oficial está aberto no PC. Feche-o. |
 | O texto não vai para a área de transferência | Instale o `wl-clipboard` (Wayland) ou o `xclip` (X11). |

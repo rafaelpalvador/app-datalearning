@@ -29,8 +29,9 @@ class DesktopFalso(ponte.Desktop):
     def copiar_imagem(self, caminho, tipo):
         self.imagem = (caminho, tipo)
 
-    def notificar(self, titulo, corpo="", pasta=None):
+    def notificar(self, titulo, corpo="", pasta=None, substituir=None):
         self.avisos.append(titulo)
+        return str(len(self.avisos))
 
     def perguntar(self, titulo, corpo):
         self.perguntas.append(titulo)
@@ -84,6 +85,31 @@ class TesteProtocolo(unittest.TestCase):
             self.assertEqual(ponte.cmd_adicionar(self.pc, args), 1)
         finally:
             novo.parar_servidor()
+
+    def test_servidor_ligado(self):
+        self.assertTrue(ponte.servidor_ligado(self.pc))
+        self.pc.parar_servidor()
+        self.assertFalse(ponte.servidor_ligado(self.pc))
+        self.pc.iniciar_servidor(multicast=False)
+
+    def test_avisos_de_envio_sem_terminal(self):
+        """Pelo atalho ou Dolphin (sem terminal): avisa ao começar e ao terminar, no mesmo aviso."""
+        self.cel.registro.marcar(self.pc.fp, True)
+        args = type("A", (), {"para": "Honor", "pin": None})()
+        import sys, io
+        antigo = sys.stderr
+        sys.stderr = io.StringIO()  # não é terminal
+        try:
+            self.assertEqual(ponte._resultado_envio(self.pc, args, [ponte.item_texto("oi")]), 0)
+            args.para = "ninguem"
+            self.pc.descobrir = lambda espera=0: None
+            self.assertEqual(ponte._resultado_envio(self.pc, args, [ponte.item_texto("oi")]), 1)
+        finally:
+            sys.stderr = antigo
+        avisos = self.pc.desktop.avisos
+        self.assertEqual(avisos[0], "Enviando texto para Honor…")
+        self.assertEqual(avisos[1], "Texto enviado para Honor")
+        self.assertEqual(avisos[2], "Ponte: não enviado")
 
     def test_texto_de_confianca_vai_direto_para_area(self):
         self.pc.registro.marcar(self.cel.fp, True)
