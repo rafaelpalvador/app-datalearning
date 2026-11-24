@@ -74,6 +74,17 @@ class TesteProtocolo(unittest.TestCase):
         self.assertEqual(conhecido["porta"], self.pc.porta)
         self.assertEqual(self.pc.registro.todos()[self.cel.fp]["alias"], "Honor")
 
+    def test_comando_adicionar_por_ip(self):
+        novo = novo_aparelho("Samsung A54", self.tmp)
+        try:
+            args = type("A", (), {"ip": f"127.0.0.1:{novo.porta}"})()
+            self.assertEqual(ponte.cmd_adicionar(self.pc, args), 0)
+            self.assertEqual(self.pc.registro.procurar("samsung")[0][0], novo.fp)
+            args.ip = "127.0.0.1:1"
+            self.assertEqual(ponte.cmd_adicionar(self.pc, args), 1)
+        finally:
+            novo.parar_servidor()
+
     def test_texto_de_confianca_vai_direto_para_area(self):
         self.pc.registro.marcar(self.cel.fp, True)
         alias, n = self.cel.enviar([ponte.item_texto("olá, área de transferência")], para="PC")

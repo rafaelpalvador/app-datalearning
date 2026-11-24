@@ -79,6 +79,7 @@ O atalho e o Dolphin passam a mandar para o Honor. Para o Samsung, use `-p samsu
 | `ponte clipboard` | Envia o que está copiado |
 | `ponte dispositivos` | Lista os aparelhos conhecidos (★ = de confiança) |
 | `ponte procurar` | Procura aparelhos na rede |
+| `ponte adicionar IP` | Adiciona um aparelho pelo IP (por exemplo, pelo Tailscale) |
 | `ponte confiar NOME` / `ponte desconfiar NOME` | Muda a confiança de um aparelho |
 | `ponte config` | Mostra onde fica o arquivo de configuração |
 
@@ -98,6 +99,28 @@ Fica em `~/.config/ponte/config.toml`. Depois de mudar, saia e entre de novo na 
 | `porta` | `53317` | Porta do LocalSend |
 
 O registro do que acontece fica em `~/.local/share/ponte/ponte.log`.
+
+## Fora de casa (faculdade, dados móveis)
+
+A Ponte e o LocalSend só enxergam aparelhos na mesma rede. Fora de casa há dois caminhos.
+
+### Notebook junto com você: roteador do celular
+Ligue o **roteador Wi-Fi (hotspot)** do Honor e conecte o notebook nele. Pronto: os dois estão na mesma rede e tudo funciona como em casa.
+- A transferência entre o celular e o notebook **não gasta dados móveis**: ela fica dentro do Wi-Fi do celular. Os dados só são usados se o notebook acessar a internet.
+- Não use o Wi-Fi da faculdade para isso. Redes de faculdade costumam isolar os aparelhos uns dos outros.
+
+### PC ficou em casa: Tailscale
+O [Tailscale](https://tailscale.com) cria uma rede particular entre os seus aparelhos pela internet. É grátis para uso pessoal.
+1. **PC:** `sudo pacman -S tailscale`, depois `sudo systemctl enable --now tailscaled` e `sudo tailscale up`. Entre com a sua conta.
+2. **Celular:** instale o Tailscale pela Play Store e entre com a **mesma conta**. No Honor, libere a bateria dele como fez com o LocalSend.
+3. Veja os IPs (começam com `100.`) no app do Tailscale ou com `tailscale ip -4` no PC.
+4. **Celular → PC:** no LocalSend, use a opção de enviar por endereço IP e digite o IP do PC no Tailscale.
+5. **PC → celular:** com o LocalSend aberto no celular, rode uma vez `ponte adicionar 100.x.y.z` (o IP do celular no Tailscale). Depois disso, o atalho e o Dolphin funcionam normalmente.
+
+O que muda em relação a casa:
+- O PC precisa estar **ligado** e com a sessão aberta.
+- Aqui a transferência **gasta dados móveis**. Textos e fotos não pesam; vídeos grandes, sim.
+- Pode ficar mais lento: depende da sua internet de casa e do sinal do celular.
 
 ## Se não funcionar
 

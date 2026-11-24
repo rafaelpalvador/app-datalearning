@@ -1164,6 +1164,18 @@ def cmd_dispositivos(app, args):
     return 0
 
 
+def cmd_adicionar(app, args):
+    """Adiciona um aparelho pelo IP (ex.: IP do Tailscale, quando não há rede local em comum)."""
+    ip, _, porta = args.ip.partition(":")
+    info = app.registrar_em(ip, int(porta or app.porta), timeout=8)
+    if not info:
+        print(f"Erro: ninguém respondeu em {args.ip}. O LocalSend está aberto no aparelho "
+              "e, se for pelo Tailscale, o Tailscale está ligado nos dois?", file=sys.stderr)
+        return 1
+    print(f"{info.get('alias')} adicionado ({ip}).")
+    return 0
+
+
 def cmd_procurar(app, args):
     print("Procurando aparelhos com o LocalSend aberto…", file=sys.stderr)
     app.anunciar()
@@ -1225,6 +1237,9 @@ def main(argv=None) -> int:
                 ).set_defaults(f=cmd_clipboard)
     sub.add_parser("dispositivos", help="lista os aparelhos conhecidos").set_defaults(f=cmd_dispositivos)
     sub.add_parser("procurar", help="procura aparelhos na rede").set_defaults(f=cmd_procurar)
+    sp = sub.add_parser("adicionar", help="adiciona um aparelho pelo IP (ex.: IP do Tailscale)")
+    sp.add_argument("ip", help="IP do aparelho, opcionalmente com :porta")
+    sp.set_defaults(f=cmd_adicionar)
     sp = sub.add_parser("confiar", help="aceita sempre um aparelho")
     sp.add_argument("nome")
     sp.set_defaults(f=cmd_confiar)
