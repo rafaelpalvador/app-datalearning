@@ -4,6 +4,9 @@ plugins {
     id("org.jetbrains.kotlin.plugin.compose")
 }
 
+// variável de ambiente vazia (secret não configurado) conta como ausente
+fun env(name: String): String? = System.getenv(name)?.takeIf { it.isNotBlank() }
+
 android {
     namespace = "app.bordas"
     compileSdk = 35
@@ -13,18 +16,18 @@ android {
         minSdk = 26
         targetSdk = 35
         // versionCode cresce a cada build do CI para o Android aceitar atualizações
-        versionCode = (System.getenv("VERSION_CODE") ?: "1").toInt()
-        versionName = System.getenv("VERSION_NAME") ?: "1.0.0"
+        versionCode = (env("VERSION_CODE") ?: "1").toInt()
+        versionName = env("VERSION_NAME") ?: "1.0.0"
     }
 
     signingConfigs {
         create("release") {
             // Mesma chave de sideload do Datum (pública de propósito) ou a chave privada dos secrets.
-            val ks = System.getenv("ANDROID_KEYSTORE_FILE")
+            val ks = env("ANDROID_KEYSTORE_FILE")
             storeFile = file(ks ?: "${rootDir}/../android/keystore/datalingo-sideload.jks")
-            storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD") ?: "datalingo"
-            keyAlias = System.getenv("ANDROID_KEY_ALIAS") ?: "datalingo"
-            keyPassword = System.getenv("ANDROID_KEY_PASSWORD") ?: "datalingo"
+            storePassword = env("ANDROID_KEYSTORE_PASSWORD") ?: "datalingo"
+            keyAlias = env("ANDROID_KEY_ALIAS") ?: "datalingo"
+            keyPassword = env("ANDROID_KEY_PASSWORD") ?: "datalingo"
         }
     }
 
