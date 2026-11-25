@@ -22,12 +22,12 @@ São 16 gestos no total. "Longo" é arrastar além da 2ª vibração (distância
 
 Voltar, tela inicial, recentes, último app, notificações, configurações rápidas, captura de tela, bloquear a tela,
 menu de energia, tela dividida, lanterna, tocar/pausar, próxima/anterior faixa, volume (+, −, painel), câmera,
-assistente de voz, **abrir qualquer app** e **abrir link ou atalho** (`https://`, `tel:`, `mailto:`, `https://wa.me/...`).
+assistente de voz, **escanear QR code**, **abrir qualquer app**, **abrir uma tela específica de um app** (inclusive apps de sistema sem ícone, como o leitor de QR do Honor) e **abrir link ou atalho** (`https://`, `tel:`, `mailto:`, `https://wa.me/...`).
 
 ## Ajustes
 
-Posição vertical, altura e largura da alça, distância mínima do gesto, distância do gesto longo, mostrar/ocultar a alça,
-vibração, mostrar o nome do gesto (para aprender) e funcionar ou não na horizontal.
+Posição vertical, altura e largura da alça, distância mínima do gesto, distância do gesto longo, visibilidade da alça
+(0% = transparente), seta animada saindo da borda com o nome da ação (como na Samsung), vibração, mostrar o nome do gesto (para aprender) e funcionar ou não na horizontal.
 
 ## Instalação
 

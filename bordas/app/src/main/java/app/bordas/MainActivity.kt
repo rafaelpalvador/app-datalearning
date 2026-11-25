@@ -98,7 +98,8 @@ fun BordasTheme(content: @Composable () -> Unit) {
 
 private sealed interface Picker {
     data class PickAction(val side: Side, val gesture: Gesture) : Picker
-    data class PickApp(val side: Side, val gesture: Gesture) : Picker
+    data class PickApp(val side: Side, val gesture: Gesture, val forActivity: Boolean) : Picker
+    data class PickActivity(val side: Side, val gesture: Gesture, val pkg: String, val appLabel: String) : Picker
     data class PickUrl(val side: Side, val gesture: Gesture) : Picker
 }
 
@@ -194,7 +195,8 @@ fun MainScreen() {
             onDismiss = { picker = null },
             onPick = { t ->
                 picker = when (t) {
-                    ActionType.OPEN_APP -> Picker.PickApp(p.side, p.gesture)
+                    ActionType.OPEN_APP -> Picker.PickApp(p.side, p.gesture, forActivity = false)
+                    ActionType.OPEN_ACTIVITY -> Picker.PickApp(p.side, p.gesture, forActivity = true)
                     ActionType.OPEN_URL -> Picker.PickUrl(p.side, p.gesture)
                     else -> {
                         setAction(p.side, p.gesture, Action(t))
@@ -204,9 +206,25 @@ fun MainScreen() {
             },
         )
         is Picker.PickApp -> AppPickerDialog(
+            allApps = p.forActivity,
             onDismiss = { picker = null },
             onPick = { app ->
-                setAction(p.side, p.gesture, Action(ActionType.OPEN_APP, app.pkg, app.label))
+                picker = if (p.forActivity) {
+                    Picker.PickActivity(p.side, p.gesture, app.pkg, app.label)
+                } else {
+                    setAction(p.side, p.gesture, Action(ActionType.OPEN_APP, app.pkg, app.label))
+                    null
+                }
+            },
+        )
+        is Picker.PickActivity -> ActivityPickerDialog(
+            pkg = p.pkg,
+            appLabel = p.appLabel,
+            onDismiss = { picker = null },
+            onPick = { act ->
+                val name = if (act.label.isBlank() || act.label == p.appLabel) "${p.appLabel} (${act.shortName})"
+                else "${p.appLabel}: ${act.label}"
+                setAction(p.side, p.gesture, Action(ActionType.OPEN_ACTIVITY, "${p.pkg}/${act.cls}", name))
                 picker = null
             },
         )
@@ -320,7 +338,14 @@ private fun HandleSettings(cfg: Config, update: (Config) -> Unit) {
             SliderSetting("Largura da área de toque", cfg.widthDp, 4..40, " dp") { update(cfg.copy(widthDp = it)) }
             SliderSetting("Distância mínima do gesto", cfg.shortDp, 16..120, " dp") { update(cfg.copy(shortDp = it)) }
             SliderSetting("Gesto longo a partir de", cfg.longPct, 15..80, "% da tela") { update(cfg.copy(longPct = it)) }
-            SwitchSetting("Mostrar a alça", cfg.showHandle, { update(cfg.copy(showHandle = it)) }, subtitle = "Uma linha fina e translúcida na borda")
+            SliderSetting("Visibilidade da alça", cfg.handleAlpha, 0..100, "%") { update(cfg.copy(handleAlpha = it)) }
+            Text(
+                if (cfg.handleAlpha == 0) "Transparente: a alça continua funcionando, só não aparece."
+                else "0% = totalmente transparente (continua funcionando).",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.outline,
+            )
+            SwitchSetting("Mostrar a seta do gesto", cfg.showFeedback, { update(cfg.copy(showFeedback = it)) }, subtitle = "Seta saindo da borda com o nome da ação, como na Samsung")
             SwitchSetting("Vibrar", cfg.haptic, { update(cfg.copy(haptic = it)) }, subtitle = "1 toque = gesto curto, 2º toque mais forte = gesto longo")
             SwitchSetting("Mostrar o nome do gesto", cfg.showToast, { update(cfg.copy(showToast = it)) }, subtitle = "Bom para aprender e testar")
             SwitchSetting("Funcionar na horizontal", cfg.landscape, { update(cfg.copy(landscape = it)) }, subtitle = "Desligado = não atrapalha vídeos e jogos")
@@ -419,7 +444,32 @@ private fun ActionPickerDialog(
 
 private data class AppEntry(val label: String, val pkg: String, val icon: ImageBitmap?)
 
-private fun loadApps(ctx: Context): List<AppEntry> {
+private fun loadApps(ctx: Context, all: Boolean): List<AppEntry> =
+    if (all) loadAllApps(ctx) else loadLauncherApps(ctx)
+
+/** Todos os pacotes instalados, inclusive os de sistema sem ícone na gaveta (ex.: leitor de QR). */
+private fun loadAllApps(ctx: Context): List<AppEntry> {
+    val pm = ctx.packageManager
+    val list = if (Build.VERSION.SDK_INT >= 33) {
+        pm.getInstalledApplications(PackageManager.ApplicationInfoFlags.of(0))
+    } else {
+        @Suppress("DEPRECATION")
+        pm.getInstalledApplications(0)
+    }
+    val px = (40 * ctx.resources.displayMetrics.density).toInt()
+    return list
+        .filter { it.packageName != ctx.packageName }
+        .map { ai ->
+            AppEntry(
+                label = ai.loadLabel(pm).toString(),
+                pkg = ai.packageName,
+                icon = runCatching { ai.loadIcon(pm).toBitmap(px, px).asImageBitmap() }.getOrNull(),
+            )
+        }
+        .sortedBy { it.label.lowercase() }
+}
+
+private fun loadLauncherApps(ctx: Context): List<AppEntry> {
     val pm = ctx.packageManager
     val intent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
     val list = if (Build.VERSION.SDK_INT >= 33) {
@@ -444,17 +494,17 @@ private fun loadApps(ctx: Context): List<AppEntry> {
 }
 
 @Composable
-private fun AppPickerDialog(onDismiss: () -> Unit, onPick: (AppEntry) -> Unit) {
+private fun AppPickerDialog(allApps: Boolean, onDismiss: () -> Unit, onPick: (AppEntry) -> Unit) {
     val ctx = LocalContext.current
     val apps by produceState<List<AppEntry>?>(initialValue = null) {
-        value = withContext(Dispatchers.IO) { loadApps(ctx) }
+        value = withContext(Dispatchers.IO) { loadApps(ctx, allApps) }
     }
     var query by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {},
         dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } },
-        title = { Text("Escolha o app") },
+        title = { Text(if (allApps) "De qual app é a tela?" else "Escolha o app") },
         text = {
             Column {
                 OutlinedTextField(
@@ -471,7 +521,10 @@ private fun AppPickerDialog(onDismiss: () -> Unit, onPick: (AppEntry) -> Unit) {
                         CircularProgressIndicator()
                     }
                 } else {
-                    val shown = list.filter { query.isBlank() || it.label.contains(query.trim(), ignoreCase = true) }
+                    val q = query.trim()
+                    val shown = list.filter {
+                        q.isEmpty() || it.label.contains(q, ignoreCase = true) || (allApps && it.pkg.contains(q, ignoreCase = true))
+                    }
                     LazyColumn(Modifier.heightIn(max = 420.dp)) {
                         items(shown, key = { it.pkg }) { app ->
                             Row(
@@ -485,11 +538,95 @@ private fun AppPickerDialog(onDismiss: () -> Unit, onPick: (AppEntry) -> Unit) {
                                     Spacer(Modifier.size(36.dp))
                                 }
                                 Spacer(Modifier.width(12.dp))
-                                Text(app.label)
+                                Column {
+                                    Text(app.label)
+                                    if (allApps) {
+                                        Text(app.pkg, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.outline)
+                                    }
+                                }
                             }
                         }
                     }
                 }
+            }
+        },
+    )
+}
+
+private data class ActEntry(val cls: String, val label: String) {
+    val shortName: String get() = cls.substringAfterLast('.')
+}
+
+/** Telas (activities) que o app deixa outros apps abrirem. */
+private fun loadActivities(ctx: Context, pkg: String): List<ActEntry> {
+    val pm = ctx.packageManager
+    val info = runCatching {
+        if (Build.VERSION.SDK_INT >= 33) {
+            pm.getPackageInfo(pkg, PackageManager.PackageInfoFlags.of(PackageManager.GET_ACTIVITIES.toLong()))
+        } else {
+            @Suppress("DEPRECATION")
+            pm.getPackageInfo(pkg, PackageManager.GET_ACTIVITIES)
+        }
+    }.getOrNull() ?: return emptyList()
+    return info.activities.orEmpty()
+        .filter { it.exported && it.enabled && it.permission == null }
+        .map { ActEntry(it.name, it.loadLabel(pm).toString()) }
+        .sortedBy { it.shortName.lowercase() }
+}
+
+@Composable
+private fun ActivityPickerDialog(pkg: String, appLabel: String, onDismiss: () -> Unit, onPick: (ActEntry) -> Unit) {
+    val ctx = LocalContext.current
+    val acts by produceState<List<ActEntry>?>(initialValue = null, pkg) {
+        value = withContext(Dispatchers.IO) { loadActivities(ctx, pkg) }
+    }
+    var query by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        confirmButton = {},
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancelar") } },
+        title = { Text("Telas de $appLabel") },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    placeholder = { Text("Buscar (ex.: scan, qr, code)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Spacer(Modifier.height(8.dp))
+                val list = acts
+                when {
+                    list == null -> Box(Modifier.fillMaxWidth().height(120.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator()
+                    }
+                    list.isEmpty() -> Text("Este app não tem telas que possam ser abertas por outros apps.")
+                    else -> {
+                        val q = query.trim()
+                        val shown = list.filter {
+                            q.isEmpty() || it.cls.contains(q, ignoreCase = true) || it.label.contains(q, ignoreCase = true)
+                        }
+                        LazyColumn(Modifier.heightIn(max = 420.dp)) {
+                            items(shown, key = { it.cls }) { act ->
+                                Column(Modifier.fillMaxWidth().clickable { onPick(act) }.padding(vertical = 8.dp)) {
+                                    Text(act.shortName, style = MaterialTheme.typography.bodyLarge)
+                                    Text(
+                                        "${act.label} · ${act.cls}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.outline,
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+                Text(
+                    "Dica: nem toda tela abre sozinha; se não funcionar, teste outra da lista.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.outline,
+                    modifier = Modifier.padding(top = 8.dp),
+                )
             }
         },
     )

@@ -85,8 +85,10 @@ enum class ActionType(val label: String, val minSdk: Int = 0) {
     VOLUME_DOWN("Diminuir volume"),
     VOLUME_PANEL("Mostrar volume"),
     CAMERA("Abrir câmera"),
+    QR_SCANNER("Escanear QR code"),
     ASSISTANT("Assistente de voz"),
     OPEN_APP("Abrir um app…"),
+    OPEN_ACTIVITY("Abrir uma tela de um app…"),
     OPEN_URL("Abrir link ou atalho…"),
 }
 
@@ -94,7 +96,7 @@ data class Action(val type: ActionType, val param: String = "", val name: String
     val label: String
         get() = when (type) {
             ActionType.OPEN_APP -> "Abrir ${name.ifBlank { param }}"
-            ActionType.OPEN_URL -> "Abrir ${name.ifBlank { param }}"
+            ActionType.OPEN_URL, ActionType.OPEN_ACTIVITY -> "Abrir ${name.ifBlank { param }}"
             else -> type.label
         }
 

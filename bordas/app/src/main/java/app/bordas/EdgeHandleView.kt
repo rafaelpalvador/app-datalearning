@@ -22,14 +22,20 @@ import android.view.View
 class EdgeHandleView(
     context: Context,
     private val side: Side,
-    private val onGesture: (Side, Gesture) -> Unit,
+    private val listener: Listener,
 ) : View(context) {
 
+    interface Listener {
+        fun onGestureStart(side: Side, rawY: Float, shortPx: Float)
+        fun onGestureMove(side: Side, inward: Float, dy: Float, gesture: Gesture?)
+        fun onGestureEnd(side: Side, gesture: Gesture?)
+    }
+
     private val density = resources.displayMetrics.density
-    private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(120, 140, 140, 140) }
+    private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(150, 150, 150) }
     private val pill = RectF()
 
-    private var showHandle = true
+    private var handleAlpha = 0
     private var haptic = true
     private var shortPx = 40f * density
     private var longPx = 300f * density
@@ -49,7 +55,8 @@ class EdgeHandleView(
         }
 
     fun update(cfg: Config, screenShortSide: Int) {
-        showHandle = cfg.showHandle
+        handleAlpha = (cfg.handleAlpha.coerceIn(0, 100) * 255 / 100)
+        paint.alpha = handleAlpha
         haptic = cfg.haptic
         shortPx = cfg.shortDp * density
         longPx = maxOf(shortPx * 1.5f, screenShortSide * cfg.longPct / 100f)
@@ -66,7 +73,7 @@ class EdgeHandleView(
     }
 
     override fun onDraw(canvas: Canvas) {
-        if (!showHandle) return
+        if (handleAlpha == 0) return
         val w = 4f * density
         val inset = 2f * density
         val left = if (side == Side.LEFT) inset else width - inset - w
@@ -83,9 +90,11 @@ class EdgeHandleView(
                 tracking = true
                 shortHit = false
                 longHit = false
+                listener.onGestureStart(side, y0, shortPx)
             }
             MotionEvent.ACTION_MOVE -> if (tracking) {
                 val g = current(e)
+                listener.onGestureMove(side, inward(e), e.rawY - y0, g)
                 if (g != null && !shortHit) {
                     shortHit = true
                     tick(false)
@@ -97,18 +106,23 @@ class EdgeHandleView(
             }
             MotionEvent.ACTION_UP -> if (tracking) {
                 tracking = false
-                current(e)?.let { onGesture(side, it) }
+                listener.onGestureEnd(side, current(e))
             }
-            MotionEvent.ACTION_CANCEL -> tracking = false
+            MotionEvent.ACTION_CANCEL -> if (tracking) {
+                tracking = false
+                listener.onGestureEnd(side, null)
+            }
         }
         return true
     }
 
-    private fun current(e: MotionEvent): Gesture? {
+    private fun inward(e: MotionEvent): Float {
         val dx = e.rawX - x0
-        val inward = if (side == Side.LEFT) dx else -dx
-        return GestureClassifier.classify(inward, e.rawY - y0, shortPx, longPx)
+        return if (side == Side.LEFT) dx else -dx
     }
+
+    private fun current(e: MotionEvent): Gesture? =
+        GestureClassifier.classify(inward(e), e.rawY - y0, shortPx, longPx)
 
     private fun tick(strong: Boolean) {
         if (!haptic) return

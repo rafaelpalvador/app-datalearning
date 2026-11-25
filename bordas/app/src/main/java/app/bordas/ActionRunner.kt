@@ -1,6 +1,7 @@
 package app.bordas
 
 import android.accessibilityservice.AccessibilityService
+import android.content.ComponentName
 import android.content.Intent
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraManager
@@ -70,8 +71,11 @@ class ActionRunner(private val svc: AccessibilityService) {
         ActionType.VOLUME_DOWN -> volume(AudioManager.ADJUST_LOWER)
         ActionType.VOLUME_PANEL -> volume(AudioManager.ADJUST_SAME)
         ActionType.CAMERA -> start(Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA))
+        ActionType.QR_SCANNER -> scanQr()
         ActionType.ASSISTANT -> start(Intent(Intent.ACTION_VOICE_COMMAND))
         ActionType.OPEN_APP -> svc.packageManager.getLaunchIntentForPackage(a.param)?.let { start(it) } ?: false
+        ActionType.OPEN_ACTIVITY ->
+            ComponentName.unflattenFromString(a.param)?.let { start(Intent(Intent.ACTION_MAIN).setComponent(it)) } ?: false
         ActionType.OPEN_URL -> a.param.isNotBlank() && start(Intent(Intent.ACTION_VIEW, Uri.parse(a.param.trim())))
     }
 
@@ -81,6 +85,21 @@ class ActionRunner(private val svc: AccessibilityService) {
         intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_RESET_TASK_IF_NEEDED)
         svc.startActivity(intent)
         return true
+    }
+
+    /**
+     * Leitor de QR: o do Google Play Services (o mesmo do atalho do Android 13+),
+     * depois Google Lens e, por fim, a câmera (a câmera do Honor lê QR no modo foto).
+     */
+    private fun scanQr(): Boolean {
+        val candidates = listOf(
+            Intent().setComponent(
+                ComponentName("com.google.android.gms", "com.google.android.gms.mlkit.barcode.ui.PlatformBarcodeScanningActivityProxy"),
+            ),
+            svc.packageManager.getLaunchIntentForPackage("com.google.ar.lens"),
+            Intent(MediaStore.INTENT_ACTION_STILL_IMAGE_CAMERA),
+        )
+        return candidates.filterNotNull().any { runCatching { start(it) }.isSuccess }
     }
 
     private fun toggleTorch(): Boolean {

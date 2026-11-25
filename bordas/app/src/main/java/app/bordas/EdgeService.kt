@@ -23,12 +23,14 @@ import android.widget.Toast
  * Serviço de acessibilidade: desenha as alças nas bordas por cima de qualquer app
  * e executa as ações globais (voltar, início, recentes...).
  */
-class EdgeService : AccessibilityService(), SharedPreferences.OnSharedPreferenceChangeListener {
+class EdgeService : AccessibilityService(), SharedPreferences.OnSharedPreferenceChangeListener, EdgeHandleView.Listener {
 
     private lateinit var wm: WindowManager
     private lateinit var prefs: Prefs
     private lateinit var runner: ActionRunner
     private val handles = mutableMapOf<Side, EdgeHandleView>()
+    private var feedback: GestureFeedbackView? = null
+    private var labels: Map<Gesture, Action> = emptyMap()
     private val main = Handler(Looper.getMainLooper())
     private val refreshTask = Runnable { refresh() }
     private var connected = false
@@ -70,6 +72,8 @@ class EdgeService : AccessibilityService(), SharedPreferences.OnSharedPreference
         prefs.sp.unregisterOnSharedPreferenceChangeListener(this)
         handles.values.forEach { runCatching { wm.removeView(it) } }
         handles.clear()
+        feedback?.let { runCatching { wm.removeView(it) } }
+        feedback = null
         runner.release()
     }
 
@@ -96,13 +100,51 @@ class EdgeService : AccessibilityService(), SharedPreferences.OnSharedPreference
             }
             val lp = layoutParams(side, cfg, h)
             if (view == null) {
-                val v = EdgeHandleView(this, side, ::onGesture)
+                val v = EdgeHandleView(this, side, this)
                 v.update(cfg, minOf(w, h))
                 runCatching { wm.addView(v, lp) }.onSuccess { handles[side] = v }
             } else {
                 view.update(cfg, minOf(w, h))
                 runCatching { wm.updateViewLayout(view, lp) }
             }
+        }
+        refreshFeedback(cfg.showFeedback && handles.isNotEmpty(), w, h)
+    }
+
+    /** Camada de tela cheia, sem toque, onde a seta do gesto é desenhada. */
+    private fun refreshFeedback(want: Boolean, w: Int, h: Int) {
+        val view = feedback
+        if (!want) {
+            if (view != null) {
+                runCatching { wm.removeView(view) }
+                feedback = null
+            }
+            return
+        }
+        val lp = WindowManager.LayoutParams(
+            w,
+            h,
+            WindowManager.LayoutParams.TYPE_ACCESSIBILITY_OVERLAY,
+            WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE or
+                WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE or
+                WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
+                WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+            PixelFormat.TRANSLUCENT,
+        ).apply {
+            gravity = Gravity.TOP or Gravity.LEFT
+            if (Build.VERSION.SDK_INT >= 30) {
+                layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_ALWAYS
+                fitInsetsTypes = 0
+            } else if (Build.VERSION.SDK_INT >= 28) {
+                layoutInDisplayCutoutMode = WindowManager.LayoutParams.LAYOUT_IN_DISPLAY_CUTOUT_MODE_SHORT_EDGES
+            }
+            title = "Bordas seta"
+        }
+        if (view == null) {
+            val v = GestureFeedbackView(this)
+            runCatching { wm.addView(v, lp) }.onSuccess { feedback = v }
+        } else {
+            runCatching { wm.updateViewLayout(view, lp) }
         }
     }
 
@@ -145,6 +187,21 @@ class EdgeService : AccessibilityService(), SharedPreferences.OnSharedPreference
         if (m.widthPixels > 0) return m.widthPixels to m.heightPixels
         val r = resources.displayMetrics
         return r.widthPixels to r.heightPixels
+    }
+
+    override fun onGestureStart(side: Side, rawY: Float, shortPx: Float) {
+        labels = Gesture.entries.associateWith { prefs.action(side, it) }
+        feedback?.start(side, rawY, shortPx)
+    }
+
+    override fun onGestureMove(side: Side, inward: Float, dy: Float, gesture: Gesture?) {
+        val action = gesture?.let { labels[it] }
+        feedback?.move(inward, dy, gesture, action?.takeIf { it.type != ActionType.NONE }?.label)
+    }
+
+    override fun onGestureEnd(side: Side, gesture: Gesture?) {
+        feedback?.end()
+        if (gesture != null) onGesture(side, gesture)
     }
 
     private fun onGesture(side: Side, gesture: Gesture) {

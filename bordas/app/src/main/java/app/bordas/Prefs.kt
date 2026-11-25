@@ -16,7 +16,10 @@ data class Config(
     val shortDp: Int = 40,
     /** gesto longo: % da largura da tela */
     val longPct: Int = 35,
-    val showHandle: Boolean = true,
+    /** 0 = alça totalmente transparente */
+    val handleAlpha: Int = 40,
+    /** seta animada saindo da borda durante o gesto */
+    val showFeedback: Boolean = true,
     val haptic: Boolean = true,
     val showToast: Boolean = false,
     val landscape: Boolean = false,
@@ -39,7 +42,8 @@ class Prefs(context: Context) {
             widthDp = sp.getInt("width_dp", d.widthDp),
             shortDp = sp.getInt("short_dp", d.shortDp),
             longPct = sp.getInt("long_pct", d.longPct),
-            showHandle = sp.getBoolean("show_handle", d.showHandle),
+            handleAlpha = sp.getInt("handle_alpha", if (sp.getBoolean("show_handle", true)) d.handleAlpha else 0),
+            showFeedback = sp.getBoolean("show_feedback", d.showFeedback),
             haptic = sp.getBoolean("haptic", d.haptic),
             showToast = sp.getBoolean("show_toast", d.showToast),
             landscape = sp.getBoolean("landscape", d.landscape),
@@ -56,7 +60,8 @@ class Prefs(context: Context) {
             .putInt("width_dp", c.widthDp)
             .putInt("short_dp", c.shortDp)
             .putInt("long_pct", c.longPct)
-            .putBoolean("show_handle", c.showHandle)
+            .putInt("handle_alpha", c.handleAlpha)
+            .putBoolean("show_feedback", c.showFeedback)
             .putBoolean("haptic", c.haptic)
             .putBoolean("show_toast", c.showToast)
             .putBoolean("landscape", c.landscape)
