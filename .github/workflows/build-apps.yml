@@ -4,6 +4,8 @@ on:
   push:
     branches: ['**']
     tags: ['v*']
+    # o app Bordas tem workflow próprio (build-bordas.yml)
+    paths-ignore: ['bordas/**', '.github/workflows/build-bordas.yml']
   workflow_dispatch:
 
 permissions:

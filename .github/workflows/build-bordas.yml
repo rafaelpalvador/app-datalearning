@@ -1,0 +1,56 @@
+name: Build Bordas (gestos de borda, Android)
+
+on:
+  push:
+    branches: ['**']
+    paths: ['bordas/**', '.github/workflows/build-bordas.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    name: Testes + APK
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '21', cache: gradle }
+      - name: Chave privada (opcional, via secrets)
+        env:
+          KEYSTORE_B64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        if: env.KEYSTORE_B64 != ''
+        run: |
+          echo "$KEYSTORE_B64" | base64 -d > "$RUNNER_TEMP/release.jks"
+          echo "ANDROID_KEYSTORE_FILE=$RUNNER_TEMP/release.jks" >> "$GITHUB_ENV"
+      - name: Testar e compilar
+        working-directory: bordas
+        env:
+          VERSION_CODE: ${{ github.run_number }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          export VERSION_NAME=$(cat VERSION)
+          chmod +x gradlew
+          ./gradlew testReleaseUnitTest assembleRelease --no-daemon
+          mkdir -p ../release
+          cp app/build/outputs/apk/release/app-release.apk "../release/Bordas-$VERSION_NAME-android.apk"
+      - uses: actions/upload-artifact@v4
+        with: { name: Bordas-Android, path: release/*.apk }
+      # Release separada do Datum (tag bordas-v*), sem marcar como "latest"
+      # para não confundir o Obtainium que acompanha o Datum.
+      - name: Publicar release
+        if: github.event_name == 'workflow_dispatch' || github.ref == 'refs/heads/ccr-ed63c115-q65tl5'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          V="bordas-v$(cat bordas/VERSION)"
+          retry() { for i in 1 2 3 4 5; do "$@" && return 0; echo "tentativa $i falhou: $*"; sleep $((i * 15)); done; return 1; }
+          if ! gh release view "$V" >/dev/null 2>&1; then
+            retry gh release create "$V" --target "$GITHUB_SHA" --title "Bordas ${V#bordas-v}" --latest=false \
+              --notes "Bordas: gestos de borda para Android (deslize reto, diagonal, curto ou longo para executar ações)."
+          fi
+          for f in release/*.apk; do retry gh release upload "$V" "$f" --clobber; done

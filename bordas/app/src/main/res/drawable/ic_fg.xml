@@ -1,0 +1,35 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- celular -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="3.5"
+        android:pathData="M44,28 H66 A6,6 0 0 1 72,34 V74 A6,6 0 0 1 66,80 H44 A6,6 0 0 1 38,74 V34 A6,6 0 0 1 44,28 Z" />
+    <!-- alça na borda -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFD54F"
+        android:strokeLineCap="round"
+        android:strokeWidth="4"
+        android:pathData="M33,44 V64" />
+    <!-- seta reta -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="3.5"
+        android:pathData="M45,60 H63 M58,55 L63,60 L58,65" />
+    <!-- seta diagonal -->
+    <path
+        android:fillColor="#00000000"
+        android:strokeColor="#FFFFFF"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:strokeWidth="3.5"
+        android:pathData="M45,53 L61,40 M54,39.5 L61,40 L60.5,47" />
+</vector>
