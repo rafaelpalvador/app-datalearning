@@ -176,7 +176,7 @@ fun MainScreen() {
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
                     )
                     HorizontalDivider()
-                    Gesture.entries.forEach { g ->
+                    Gesture.entries.filter { cfg.longGestures || !it.isLong }.forEach { g ->
                         GestureRow(side, g, actions[side to g] ?: Action.NONE) {
                             picker = Picker.PickAction(side, g)
                         }
@@ -337,7 +337,15 @@ private fun HandleSettings(cfg: Config, update: (Config) -> Unit) {
             SliderSetting("Altura da alça", cfg.heightDp, 60..600, " dp") { update(cfg.copy(heightDp = it)) }
             SliderSetting("Largura da área de toque", cfg.widthDp, 4..40, " dp") { update(cfg.copy(widthDp = it)) }
             SliderSetting("Distância mínima do gesto", cfg.shortDp, 16..120, " dp") { update(cfg.copy(shortDp = it)) }
-            SliderSetting("Gesto longo a partir de", cfg.longPct, 15..80, "% da tela") { update(cfg.copy(longPct = it)) }
+            SwitchSetting(
+                "Gestos longos",
+                cfg.longGestures,
+                { update(cfg.copy(longGestures = it)) },
+                subtitle = "Arrastar mais longe vira outro gesto (reto, diagonal para cima e para baixo)",
+            )
+            if (cfg.longGestures) {
+                SliderSetting("Gesto longo a partir de", cfg.longPct, 15..80, "% da tela") { update(cfg.copy(longPct = it)) }
+            }
             SliderSetting("Visibilidade da alça", cfg.handleAlpha, 0..100, "%") { update(cfg.copy(handleAlpha = it)) }
             Text(
                 if (cfg.handleAlpha == 0) "Transparente: a alça continua funcionando, só não aparece."
@@ -346,7 +354,12 @@ private fun HandleSettings(cfg: Config, update: (Config) -> Unit) {
                 color = MaterialTheme.colorScheme.outline,
             )
             SwitchSetting("Mostrar a seta do gesto", cfg.showFeedback, { update(cfg.copy(showFeedback = it)) }, subtitle = "Seta saindo da borda com o nome da ação, como na Samsung")
-            SwitchSetting("Vibrar", cfg.haptic, { update(cfg.copy(haptic = it)) }, subtitle = "1 toque = gesto curto, 2º toque mais forte = gesto longo")
+            SwitchSetting(
+                "Vibrar",
+                cfg.haptic,
+                { update(cfg.copy(haptic = it)) },
+                subtitle = if (cfg.longGestures) "1 toque = gesto curto, 2º toque mais forte = gesto longo" else "Vibra quando o gesto é reconhecido",
+            )
             SwitchSetting("Mostrar o nome do gesto", cfg.showToast, { update(cfg.copy(showToast = it)) }, subtitle = "Bom para aprender e testar")
             SwitchSetting("Funcionar na horizontal", cfg.landscape, { update(cfg.copy(landscape = it)) }, subtitle = "Desligado = não atrapalha vídeos e jogos")
         }
@@ -396,8 +409,8 @@ private fun TipsCard() {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Dicas", style = MaterialTheme.typography.titleMedium)
             Text(
-                "• Comece o gesto em cima da alça e arraste para dentro. Reto, na diagonal para cima ou para baixo; " +
-                    "curto ou longo (arraste até sentir a 2ª vibração). Também dá para deslizar pela borda, para cima ou para baixo.",
+                "• Comece o gesto em cima da alça e arraste: reto para dentro, na diagonal para cima, na diagonal para baixo, " +
+                    "ou para cima e para baixo rente à borda. São 5 gestos por lado (10 no total).",
             )
             Text(
                 "• Navegação por gestos do Android: a borda também é o \"voltar\" do sistema. O Bordas reserva a área da alça, " +

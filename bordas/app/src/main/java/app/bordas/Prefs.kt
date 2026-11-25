@@ -14,6 +14,8 @@ data class Config(
     val widthDp: Int = 14,
     /** distância mínima para o gesto contar */
     val shortDp: Int = 40,
+    /** gestos longos (curto/longo em cada direção); desligado = 5 gestos por lado */
+    val longGestures: Boolean = false,
     /** gesto longo: % da largura da tela */
     val longPct: Int = 35,
     /** 0 = alça totalmente transparente */
@@ -41,6 +43,7 @@ class Prefs(context: Context) {
             heightDp = sp.getInt("height_dp", d.heightDp),
             widthDp = sp.getInt("width_dp", d.widthDp),
             shortDp = sp.getInt("short_dp", d.shortDp),
+            longGestures = sp.getBoolean("long_gestures", d.longGestures),
             longPct = sp.getInt("long_pct", d.longPct),
             handleAlpha = sp.getInt("handle_alpha", if (sp.getBoolean("show_handle", true)) d.handleAlpha else 0),
             showFeedback = sp.getBoolean("show_feedback", d.showFeedback),
@@ -59,6 +62,7 @@ class Prefs(context: Context) {
             .putInt("height_dp", c.heightDp)
             .putInt("width_dp", c.widthDp)
             .putInt("short_dp", c.shortDp)
+            .putBoolean("long_gestures", c.longGestures)
             .putInt("long_pct", c.longPct)
             .putInt("handle_alpha", c.handleAlpha)
             .putBoolean("show_feedback", c.showFeedback)
@@ -90,7 +94,8 @@ class Prefs(context: Context) {
                 Gesture.DIAG_DOWN_SHORT -> ActionType.NOTIFICATIONS
                 Gesture.DIAG_DOWN_LONG ->
                     if (side == Side.LEFT) ActionType.QUICK_SETTINGS else ActionType.FLASHLIGHT
-                Gesture.ALONG_UP, Gesture.ALONG_DOWN -> ActionType.NONE
+                Gesture.ALONG_UP -> ActionType.RECENTS
+                Gesture.ALONG_DOWN -> ActionType.QUICK_SETTINGS
             }
         )
     }

@@ -5,18 +5,16 @@ Uma alça fina fica na borda esquerda e/ou direita da tela, e cada jeito de desl
 
 ## Gestos (por borda)
 
-| Gesto | Padrão (esquerda) | Padrão (direita) |
-|---|---|---|
-| → Reto, curto | Voltar | Voltar |
-| ⇒ Reto, longo | Voltar ao último app | Voltar ao último app |
-| ↗ Diagonal para cima, curto | Tela inicial | Tela inicial |
-| ↗ Diagonal para cima, longo | Apps recentes | Apps recentes |
-| ↘ Diagonal para baixo, curto | Notificações | Notificações |
-| ↘ Diagonal para baixo, longo | Configurações rápidas | Lanterna |
-| ↑ Pela borda, para cima | Nada | Nada |
-| ↓ Pela borda, para baixo | Nada | Nada |
+| Gesto | Padrão |
+|---|---|
+| → Reto | Voltar |
+| ↗ Diagonal para cima | Tela inicial |
+| ↘ Diagonal para baixo | Notificações |
+| ↑ Para cima (rente à borda) | Apps recentes |
+| ↓ Para baixo (rente à borda) | Configurações rápidas |
 
-São 16 gestos no total. "Longo" é arrastar além da 2ª vibração (distância ajustável).
+São 5 gestos por lado (10 no total), cada um com a ação que você escolher. Opcionalmente, ligue **Gestos longos**
+para que arrastar mais longe no reto e nas diagonais vire outro gesto (até 16 no total).
 
 ## Ações disponíveis
 

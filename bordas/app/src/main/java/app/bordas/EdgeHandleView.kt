@@ -59,7 +59,8 @@ class EdgeHandleView(
         paint.alpha = handleAlpha
         haptic = cfg.haptic
         shortPx = cfg.shortDp * density
-        longPx = maxOf(shortPx * 1.5f, screenShortSide * cfg.longPct / 100f)
+        // sem gestos longos, nenhuma distância vira "longo"
+        longPx = if (cfg.longGestures) maxOf(shortPx * 1.5f, screenShortSide * cfg.longPct / 100f) else Float.MAX_VALUE
         invalidate()
     }
 

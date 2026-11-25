@@ -10,14 +10,14 @@ enum class Side(val label: String) {
 }
 
 enum class Gesture(val label: String, val isLong: Boolean) {
-    STRAIGHT_SHORT("Reto, curto", false),
+    STRAIGHT_SHORT("Reto", false),
     STRAIGHT_LONG("Reto, longo", true),
-    DIAG_UP_SHORT("Diagonal para cima, curto", false),
+    DIAG_UP_SHORT("Diagonal para cima", false),
     DIAG_UP_LONG("Diagonal para cima, longo", true),
-    DIAG_DOWN_SHORT("Diagonal para baixo, curto", false),
+    DIAG_DOWN_SHORT("Diagonal para baixo", false),
     DIAG_DOWN_LONG("Diagonal para baixo, longo", true),
-    ALONG_UP("Pela borda, para cima", false),
-    ALONG_DOWN("Pela borda, para baixo", false);
+    ALONG_UP("Para cima", false),
+    ALONG_DOWN("Para baixo", false);
 
     fun arrow(side: Side): String {
         val left = side == Side.LEFT
