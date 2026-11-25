@@ -65,6 +65,14 @@ Referências: documentação oficial do PostgreSQL 18 e notas do 19, *The Data W
 - Internals, performance e operação: páginas de 8 KB, heap, ctid, TOAST, WAL, checkpoints, LSN, I/O assíncrono (PG18), bloat, VACUUM, autovacuum, freeze/wraparound, HOT e fillfactor, B-tree (composto, parcial, expressão, INCLUDE, custo de escrita, índices não usados, FKs sem índice), Hash, GIN (jsonb, pg_trgm), GiST e exclusion constraints, SP-GiST, BRIN e correlação, busca textual, EXPLAIN (ANALYZE, BUFFERS), nós de acesso e de junção, estatísticas e estatísticas estendidas, predicados não-SARGable, conversões implícitas, paginação keyset, N+1, particionamento RANGE/LIST/HASH e pruning, réplicas e sharding (Citus), backup lógico × físico, PITR, RPO/RTO, replicação física e lógica, slots, CDC, Patroni, PgBouncer (modos e limitações), roles, privilégios, SECURITY DEFINER, RLS, TLS, criptografia, auditoria, pg_stat_activity, pg_stat_statements, pg_locks, roteiros de incidente
 - Ecossistema moderno: OLTP × OLAP, armazenamento colunar, Kimball (grão, fatos e dimensões, estrela × floco de neve, dimensão de data, métricas aditivas/semiaditivas/não aditivas, dimensões conformadas e degeneradas), fatos transacional, snapshot periódico e acumulado, SCD 0/1/2/3/4/6, BigQuery, Snowflake, Redshift, ClickHouse, DuckDB, lakehouse (Parquet, Delta, Iceberg), ELT com dbt, CAP e PACELC, Redis (cache-aside, TTL, stampede, rate limiting, sorted sets, streams), MongoDB (embutir × referenciar), Cassandra (modelagem por consulta, R + W > N), grafos (Cypher × CTE recursiva), embeddings, distâncias, pgvector (HNSW × IVFFlat), bancos gerenciados (RDS, Aurora, Cloud SQL, AlloyDB, Neon, Supabase), migrations (Flyway, Liquibase, Alembic), expand/contract, operações seguras (CONCURRENTLY, NOT VALID + VALIDATE, lock_timeout), CI/CD de banco (Testcontainers, pgTAP, linters de migração)
 
+### Tableau
+Referências: ajuda oficial do Tableau (ordem de operações, LOD, cálculos de tabela, relacionamentos multifato, Embedding API v3 e Connected Apps), Tableau Blueprint, notas de versão (2024.2: multifato e Viz Extensions; Pulse; Tableau Agent; Tableau Next sobre Data 360 com Tableau Semantics e habilidades Data Pro, Concierge e Inspector), guias de certificação no Trailhead.
+- Fundamentos: BI e data-driven, dado × informação × insight, ecossistema (Desktop, Public, Prep, Cloud, Server, Reader, Mobile), licenças, arquivos (.twb, .twbx, .tds, .tdsx, .hyper, .tfl, .tflx), dados tabulares e granularidade, interface, VizQL, conexões (Excel, CSV, JSON, Sheets), Interpretador de Dados, tipos e funções geográficas, divisão, primeiros gráficos, Cartão de Marcas, Tableau Public
+- Básico: dimensões × medidas, discreto × contínuo, agregações (SUM, AVG, MIN, MAX, COUNT, COUNTD, MEDIAN, ATTR), VizLOD, partes × valores de data, funções de data, ano fiscal, IF/IIF/CASE, nulos (ZN, IFNULL), texto, filtros (dimensão, medida, data, Top N), hierarquias, grupos, conjuntos, compartimentos, cálculos rápidos, gráficos de negócio (eixo duplo, bullet, lollipop, treemap, heatmap, mapas), formatação, Viz in Tooltip, painéis, contêineres, histórias
+- Intermediário: ordem de operações, filtros de contexto, relacionamentos, multifato, joins, unions com curinga, blending, Live × Extract, LOD FIXED/INCLUDE/EXCLUDE, coortes, recompra, endereçamento × particionamento, WINDOW_*, LOOKUP, RANK, INDEX, SIZE, FIRST, Pareto, bump chart, filtro de cálculo de tabela, parâmetros (dinâmicos), ações (filtro, realce, URL, parâmetro, conjunto), DZV, Tableau Prep, Gestalt, padrões Z/F, layouts por dispositivo, acessibilidade
+- Avançado: densificação, scaffolding, geometria (radar, Sankey, pequenos múltiplos, Gantt), Viz Extensions, Map Layers, arquivos e funções espaciais, junção espacial, tendência, R², p-valor, k-means, previsão, z-score, TabPy/Rserve/SCRIPT_*, Hyper e performance, Gravador de Desempenho, sites/projetos/permissões, Catalog e linhagem, RLS (USERNAME, ISMEMBEROF, tabelas de direitos), Bridge, conexões virtuais e políticas de dados, certificações
+- Master: processos do Server, HA/DR, SAML/OIDC/Kerberos/SCIM, REST API e TSC, Hyper API, Metadata API (GraphQL), Embedding API v3 e JWT, Extensions API (.trex), webhooks, Document API, CI/CD e Content Migration Tool, repositório PostgreSQL e Admin Insights, Pulse, Tableau Agent, Tableau Next, Data 360, Tableau Semantics, Agentforce, MCP, Tableau Blueprint, CoE, FinOps
+
 ## Grade atual de lições
 
 ### SQL do Zero ao Avançado
@@ -181,3 +189,27 @@ Roda num PostgreSQL 18 real (PGlite, WebAssembly) dentro do app, sobre um ERP co
 **Nível 5 · Ecossistema moderno** — Ecossistema moderno: OLAP, NoSQL, vetores, nuvem e migrations
 
 - OLTP × OLAP e modelagem dimensional (Kimball) · Dimensões que mudam com o tempo (SCD) · Data warehouses na nuvem, lakehouse e DuckDB · NoSQL: Redis, MongoDB, Cassandra, grafos e o teorema CAP · Bancos vetoriais e busca semântica (pgvector) · Migrations, mudanças sem parada e CI/CD de banco · Bancos gerenciados na nuvem e arquitetura de referência · Projeto final: da transação ao dashboard
+
+### Tableau do Leigo ao Master
+
+Os campos calculados rodam no próprio app (motor da linguagem de cálculos do Tableau: nível de linha, agregados, LOD FIXED/INCLUDE/EXCLUDE, cálculos de tabela, filtros de contexto e de cálculo de tabela, USERNAME/ISMEMBEROF) sobre a base Superstore Brasil (≈ 4,2 mil itens de pedido, 2022 a 2025). Prep, TabPy e as APIs são praticados com Python.
+
+**Nível 1 · Leigo** — Fundamentos de BI, ecossistema, interface e primeiros gráficos
+
+- BI, dados orientando decisões e o papel do Tableau · Ecossistema Tableau e tipos de arquivo · Dados tabulares, granularidade e o primeiro cálculo · Anatomia da interface e o VizQL · Conectar e preparar a fonte de dados · Primeiros gráficos e o Cartão de Marcas · Projeto: primeiro painel exploratório e publicação
+
+**Nível 2 · Básico** — Pílulas azuis e verdes, agregação, datas, campos calculados, filtros e dashboards
+
+- Dimensões × medidas e discreto (azul) × contínuo (verde) · Agregação e nível de detalhe da visualização · Datas: partes × valores, funções e ano fiscal · Campos calculados: lógica, nulos e texto · Filtros, hierarquias, grupos, conjuntos e compartimentos · Cálculos de tabela rápidos · Gráficos de negócio e boas práticas visuais · Formatação, dicas, painéis e histórias · Projeto: dashboard operacional com KPIs e filtros
+
+**Nível 3 · Intermediário** — Ordem de operações, modelagem, LOD, cálculos de tabela, parâmetros, ações e Prep
+
+- A ordem de operações do Tableau · Modelagem: relacionamentos, joins, unions, blending; Live × Extract · Expressões LOD: FIXED · INCLUDE, EXCLUDE e cenários reais com LOD · Cálculos de tabela avançados: direção, partição e janelas · Parâmetros, ações e visibilidade dinâmica · ETL self-service com o Tableau Prep · UX/UI, storytelling e design responsivo · Projeto: dashboard analítico dinâmico com dados tratados
+
+**Nível 4 · Avançado** — Densificação, gráficos customizados, espacial, estatística, TabPy, performance e governança
+
+- Densificação de dados e scaffolding · Geometria e gráficos customizados · Viz Extensions e camadas de mapa · Análise espacial avançada · Estatística no painel Análise: tendência, clusters e previsão · Extensões analíticas: TabPy, R e modelos externos · Performance: Hyper, consultas e otimização · Governança, permissões e segurança em nível de linha (RLS) · Conectividade híbrida: Bridge, conexões virtuais e políticas de dados · Preparação para as certificações oficiais · Projeto: solução corporativa otimizada, segura e customizada
+
+**Nível 5 · Master** — Arquitetura enterprise, APIs, embedding, CI/CD, CoE e analytics agêntico
+
+- Arquitetura enterprise do Tableau Server · REST API e Tableau Server Client (TSC) · Hyper API: gerar extrações por código · Metadata API (GraphQL): linhagem e análise de impacto · Embedding API v3 e Connected Apps · Extensions API, webhooks e Document API · AnalyticsOps: versionamento, ambientes e testes · Monitoramento do ambiente: repositório e Admin Insights · A nova era: Pulse, Tableau Agent, Tableau Next e camada semântica · Estratégia: Tableau Blueprint, CoE e cultura de dados · Capstone Enterprise: plano de implantação Tableau Blueprint

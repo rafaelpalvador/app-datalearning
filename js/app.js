@@ -3,6 +3,8 @@ import { INTERVIEW, INTERVIEW_SQL, INTERVIEW_PY, LEVELS } from './content/interv
 import { SCHEMA_DOC } from './content/datasets.js';
 import { PG_SCHEMA_DOC } from './content/pg-dataset.js';
 import { pgRun, pgEvaluate, pgWarm } from './engines/pg-client.js';
+import { runTableau, avaliarTableau, formatar as fmtTab } from './engines/tableau-engine.js';
+import { SUPERSTORE, TABLEAU_SCHEMA } from './content/tableau-dataset.js';
 import { withVariant } from './content/helpers.js';
 import * as store from './state.js';
 import { careerOf, skippedLesson, trackCareer, trackCareers } from './career.js';
@@ -17,7 +19,7 @@ import * as sync from './sync.js';
 
 export const APP_NAME = 'Datum';
 const app = document.getElementById('app');
-const EXERCISE_TYPES = new Set(['quiz', 'order', 'fill', 'sql', 'python']);
+const EXERCISE_TYPES = new Set(['quiz', 'order', 'fill', 'sql', 'python', 'tableau']);
 const CHECKPOINT_PASS = 0.8;
 const IS_DEMO = !!window.DATALINGO_DEMO;
 
@@ -297,7 +299,7 @@ function viewHome() {
   page('home',
     h('div', { class: 'hello' },
       h('div', { class: 'page-head' }, h('span', { class: 'eyebrow' }, dateStr), h('h1', {}, s.xp === 0 ? 'Bem-vindo ao Datum' : 'Bom te ver de volta'),
-        h('p', { class: 'muted' }, 'SQL, Python e estatística para dados: teoria curta, muita prática e correção na hora.')),
+        h('p', { class: 'muted' }, 'SQL, Python, estatística, bancos de dados e Tableau: teoria completa, muita prática e correção na hora.')),
       h('div', { class: 'goal card flat', style: { padding: '12px 16px' } },
         h('div', { class: 'ring', style: { '--p': goalPct } }, h('span', {}, `${goalPct}%`)),
         h('div', {}, h('div', { class: 'small', style: { fontWeight: 600 } }, 'Meta do dia'), h('div', { class: 'small muted num' }, `${s.daily.xp} de ${s.dailyGoal} XP`))),
@@ -431,7 +433,7 @@ function viewCourse(courseId) {
 
 // ─────────────────────────────────────────── EDITOR E TABELAS
 function codeEditor(value, lang, onRun) {
-  const ta = h('textarea', { class: 'editor', spellcheck: 'false', autocapitalize: 'off', autocomplete: 'off', autocorrect: 'off', 'aria-label': `Editor de ${lang === 'sql' ? 'SQL' : 'Python'}` });
+  const ta = h('textarea', { class: 'editor', spellcheck: 'false', autocapitalize: 'off', autocomplete: 'off', autocorrect: 'off', 'aria-label': `Editor de ${lang === 'sql' ? 'SQL' : lang === 'tableau' ? 'cálculo do Tableau' : 'Python'}` });
   ta.value = value;
   const resize = () => { ta.style.height = 'auto'; ta.style.height = Math.max(130, ta.scrollHeight + 4) + 'px'; };
   ta.addEventListener('input', resize);
@@ -446,7 +448,9 @@ function codeEditor(value, lang, onRun) {
     }
   });
   requestAnimationFrame(resize);
-  const symbols = lang === 'sql' ? ['*', ',', "'", '(', ')', '=', '<', '>', ';', '%', '_', '.'] : ['(', ')', '[', ']', '"', ':', '=', '.', '_', '{', '}', '#', '    '];
+  const symbols = lang === 'sql' ? ['*', ',', "'", '(', ')', '=', '<', '>', ';', '%', '_', '.']
+    : lang === 'tableau' ? ['[', ']', '(', ')', '{', '}', ':', '"', ',', '=', '<', '>', '/', '*', '+', '-']
+    : ['(', ')', '[', ']', '"', ':', '=', '.', '_', '{', '}', '#', '    '];
   const kb = h('div', { class: 'symbol-bar', 'aria-label': 'Símbolos' }, symbols.map((sym) => h('button', {
     type: 'button',
     onmousedown: (e) => e.preventDefault(),
@@ -497,6 +501,56 @@ function pgOutput(out, res) {
   if (res.ms !== undefined) out.append(h('div', { class: 'tiny faint' }, `${res.ms} ms no PostgreSQL deste aparelho`));
 }
 
+// ─────────── Tableau: painel de dados, cenário da visualização e resultado
+function tableauDataPanel() {
+  const dims = TABLEAU_SCHEMA.filter((c) => c.papel === 'dimensão');
+  const meds = TABLEAU_SCHEMA.filter((c) => c.papel === 'medida');
+  const lista = (cs) => h('ul', {}, cs.map((c) => h('li', {}, h('code', {}, `[${c.campo}]`), ' ', c.tipo)));
+  return h('details', { class: 'panel' },
+    h('summary', {}, ic('table', 16), 'Painel de Dados · Superstore Brasil'),
+    h('div', { class: 'panel-body' },
+      h('p', { class: 'small muted' }, 'Fonte: Pedidos (≈ 4 mil itens de pedido, 2022 a 2025). Em cálculos, campos vão entre colchetes.'),
+      h('p', { class: 'small', style: { fontWeight: 600, color: 'var(--c-sql)' } }, 'Dimensões (azuis)'), lista(dims),
+      h('p', { class: 'small', style: { fontWeight: 600, color: 'var(--good)' } }, 'Medidas (verdes)'), lista(meds)));
+}
+
+function tableauScenario(step) {
+  const itens = [];
+  if (step.dims === 'linha') itens.push(['Nível', 'cada linha da base (cálculo de nível de linha)']);
+  else itens.push(['Linhas', step.dims?.length ? step.dims.map((d) => `[${d}]`).join(' › ') : '(nenhuma dimensão: um único total)']);
+  for (const [k, v] of Object.entries(step.campos || {})) itens.push(['Campo já criado', `[${k}] = ${v}`]);
+  if (step.filtro) itens.push([step.filtro.contexto ? 'Filtro de contexto' : 'Filtro de dimensão', step.filtro.expr]);
+  if (step.particao?.length) itens.push(['Calcular usando', `reinicia a cada [${step.particao.join('], [')}]`]);
+  else if (step.dims !== 'linha' && /RUNNING_|WINDOW_|LOOKUP|RANK|INDEX|TOTAL|FIRST|LAST|SIZE/.test(step.solution || step.code || '')) itens.push(['Calcular usando', 'Tabela (para baixo)']);
+  if (step.ordenar) itens.push(['Ordenação', `${step.ordenar.expr}, ${step.ordenar.asc ? 'crescente' : 'decrescente'}`]);
+  if (step.filtroTabela) itens.push(['Filtro de cálculo de tabela', step.filtroTabela]);
+  if (step.usuario) itens.push(['Usuário conectado', `${step.usuario.login}${step.usuario.grupos?.length ? ` · grupos: ${step.usuario.grupos.join(', ')}` : ''}`]);
+  return h('div', { class: 'tab-scenario' }, itens.map(([k, v]) => h('div', {}, h('span', { class: 'tiny faint' }, k), h('code', {}, v))));
+}
+
+function tableauTable(res, max = 40) {
+  const linhas = res.values.slice(0, max);
+  const ultima = res.columns.length - 1;
+  const nums = res.values.map((r) => r[ultima]).filter((v) => typeof v === 'number');
+  const maxAbs = nums.length ? Math.max(...nums.map(Math.abs)) || 1 : 0;
+  return h('div', {},
+    h('div', { class: 'table-wrap' }, h('table', { class: 'result tab-result' },
+      h('thead', {}, h('tr', {}, res.columns.map((c, i) => h('th', { class: i === ultima ? 'tab-measure' : 'tab-dim' }, c)))),
+      h('tbody', {}, linhas.map((r) => h('tr', {}, r.map((v, i) => {
+        if (i !== ultima || typeof v !== 'number' || !maxAbs) return h('td', { class: v === null ? 'null' : '' }, fmtTab(v));
+        return h('td', { class: 'tab-bar-cell' }, h('span', { class: 'tab-bar', style: { width: `${Math.round((Math.abs(v) / maxAbs) * 100)}%`, background: v < 0 ? 'var(--bad)' : 'var(--c-tableau)' } }), h('span', { class: 'num' }, fmtTab(v)));
+      })))))),
+    res.values.length > max ? h('div', { class: 'tiny faint' }, `Mostrando ${max} de ${res.values.length} ${res.linhas ? 'linhas' : 'marcas'}.`) : h('div', { class: 'tiny faint' }, `${res.values.length} ${res.linhas ? 'linhas' : res.values.length === 1 ? 'marca' : 'marcas'}${res.agregado ? ` · o Tableau agregou o cálculo de linha com ${res.agregado}()` : ''}`));
+}
+
+function tableauRun(out, step, calc) {
+  try {
+    put(out, tableauTable(runTableau({ dados: SUPERSTORE(), calc, nome: step.nome || 'Cálculo', dims: step.dims ?? [], campos: step.campos || {}, filtro: step.filtro || null, particao: step.particao || [], mostrar: step.mostrar || [], usuario: step.usuario || null, ordenar: step.ordenar || null, filtroTabela: step.filtroTabela || null })));
+  } catch (e) {
+    put(out, h('pre', { class: 'error' }, e.message));
+  }
+}
+
 function pythonOutput(out, res) {
   put(out);
   if (res.stdout) out.append(h('pre', { class: 'stdout' }, res.stdout));
@@ -528,8 +582,10 @@ const renderers = {
   example(step) {
     const out = h('div', { class: 'output' });
     const isPg = step.lang === 'pg';
+    const isTab = step.lang === 'tableau';
     const isSql = step.lang === 'sql' || isPg;
     const run = async () => {
+      if (isTab) { tableauRun(out, step, editor.value); return; }
       put(out, h('div', { class: 'small faint loading' }, isSql ? 'Executando...' : 'Preparando o Python...'));
       if (isPg) {
         pgOutput(out, await pgRun(editor.value, (m) => put(out, h('div', { class: 'small faint loading' }, m))));
@@ -545,7 +601,7 @@ const renderers = {
     };
     const wrap = codeEditor(step.code, isPg ? 'sql' : step.lang, run);
     const editor = wrap.textarea;
-    if (isSql) setTimeout(run, 30);
+    if (isSql || isTab) setTimeout(run, 30);
     const dataPanel = step.setup ? h('details', { class: 'panel' },
       h('summary', {}, ic('table', 16), 'Dados usados no exemplo'),
       h('div', { class: 'panel-body' }, step.setupNote ? h('p', { html: inline(step.setupNote) }) : h('pre', { class: 'code' }, h('code', { html: highlight(step.setup.trim(), 'python') })))) : null;
@@ -554,9 +610,10 @@ const renderers = {
         h('div', { class: 'theory-card' }, h('div', { class: 'stack', style: { gap: '14px' } },
           h('h2', {}, step.title),
           step.md ? h('div', { class: 'md', html: renderMarkdown(step.md) }) : null,
-          isSql ? schemaPanel(isPg ? 'pg' : 'sqlite') : dataPanel,
+          isTab ? tableauScenario(step) : null,
+          isTab ? tableauDataPanel() : isSql ? schemaPanel(isPg ? 'pg' : 'sqlite') : dataPanel,
           wrap,
-          h('div', { class: 'row' }, h('button', { class: 'btn sm', onclick: run }, ic('play', 15), isSql ? 'Executar de novo' : 'Executar exemplo'), h('span', { class: 'tiny faint' }, 'Altere o código e execute para experimentar')),
+          h('div', { class: 'row' }, h('button', { class: 'btn sm', onclick: run }, ic('play', 15), isTab ? 'Ver na visualização' : isSql ? 'Executar de novo' : 'Executar exemplo'), h('span', { class: 'tiny faint' }, 'Altere o código e execute para experimentar')),
           out,
           step.after ? h('div', { class: 'md', html: renderMarkdown(step.after) }) : null))),
       code: true,
@@ -692,6 +749,40 @@ const renderers = {
         put(out, h('div', { class: 'small', style: { fontWeight: 600 } }, 'Seu resultado'), resultTable(res.got));
         if (!res.ok) out.append(h('div', { class: 'small', style: { fontWeight: 600 } }, 'Resultado esperado'), resultTable(res.expected));
         return { ok: res.ok, message: res.reason, hint: res.hint };
+      },
+      solution: () => { editor.value = step.solution; editor.dispatchEvent(new Event('input')); },
+    };
+  },
+
+  tableau(step) {
+    const out = h('div', { class: 'output' });
+    const run = () => tableauRun(out, step, editor.value);
+    const wrap = codeEditor(step.starter, 'tableau', run);
+    const editor = wrap.textarea;
+    editor.addEventListener('input', () => footerReady(editor.value.trim().length > 0));
+    setTimeout(() => footerReady(editor.value.trim().length > 0), 50);
+    return {
+      el: h('div', { class: 'step' },
+        kindLabel([ic('chart', 15), step.kind === 'debug' ? 'Prática · Corrija o cálculo' : 'Prática · Cálculo Tableau']),
+        h('h2', { html: inline(step.prompt) }),
+        tableauScenario(step),
+        tableauDataPanel(),
+        step.hint ? h('details', { class: 'panel' }, h('summary', {}, ic('lightbulb', 16), 'Dica'), h('div', { class: 'panel-body', html: inline(step.hint) })) : null,
+        h('div', { class: 'tiny faint' }, `Campo calculado: ${step.nome || 'Cálculo'}`),
+        wrap,
+        h('div', { class: 'row' }, h('button', { class: 'btn sm', onclick: run }, ic('play', 15), 'Ver na visualização'), h('span', { class: 'tiny faint hide-touch' }, 'Ctrl+Enter executa')),
+        out),
+      code: true,
+      getCode: () => editor.value,
+      check: async () => {
+        const res = avaliarTableau(step, editor.value, SUPERSTORE());
+        if (res.error) {
+          put(out, h('pre', { class: 'error' }, res.reason));
+          return { ok: false, error: true, message: res.reason };
+        }
+        put(out, h('div', { class: 'small', style: { fontWeight: 600 } }, 'Sua visualização'), tableauTable(res.got));
+        if (!res.ok) out.append(h('div', { class: 'small', style: { fontWeight: 600 } }, 'Visualização esperada'), tableauTable(res.expected));
+        return { ok: res.ok, message: res.reason };
       },
       solution: () => { editor.value = step.solution; editor.dispatchEvent(new Event('input')); },
     };
@@ -875,7 +966,7 @@ function startSession({ title, items, mode, lessonId, unitId, interview, backHre
         }
         if (mode === 'review') store.clearMistake(item.lessonId, item.stepIndex);
         // guarda a solução escrita pelo aluno (portfólio e sincronização), se ele não viu a resposta
-        if (r.getCode && ['sql', 'python'].includes(item.step.type) && !usedHelp) {
+        if (r.getCode && ['sql', 'python', 'tableau'].includes(item.step.type) && !usedHelp) {
           const key = item.lessonId ? `${item.lessonId}#${item.stepIndex}` : interview ? `iv:${interview.id}` : null;
           store.saveSolution(key, r.getCode(), item.step.type);
         }
@@ -1031,8 +1122,8 @@ async function startCheckpoint(unitId) {
   if (pendentes && !await askConfirm(`O checkpoint é um teste para PULAR a unidade: se acertar 80%, as ${pendentes} lições pendentes de "${unit.title}" ficam marcadas como concluídas (aparecem como "puladas"). Para só treinar sem pular nada, use Praticar.`, { ok: 'Fazer o teste' })) return;
   const pool = unit.lessons.flatMap((l) => l.steps.map((step) => ({ step: withVariant(step), lessonId: l.id, stepIndex: step.uid, courseId: course.id })))
     .filter((it) => EXERCISE_TYPES.has(it.step.type));
-  const code = shuffle(pool.filter((it) => ['sql', 'python'].includes(it.step.type))).slice(0, 4);
-  const rest = shuffle(pool.filter((it) => !['sql', 'python'].includes(it.step.type))).slice(0, 10 - code.length);
+  const code = shuffle(pool.filter((it) => ['sql', 'python', 'tableau'].includes(it.step.type))).slice(0, 4);
+  const rest = shuffle(pool.filter((it) => !['sql', 'python', 'tableau'].includes(it.step.type))).slice(0, 10 - code.length);
   startSession({ title: `Checkpoint · ${unit.title}`, items: shuffle([...code, ...rest]), mode: 'checkpoint', unitId, backHref: `#/curso/${course.id}` });
 }
 
@@ -1523,7 +1614,7 @@ function segmented(options, value, onchange) {
   return h('div', { class: 'tabs' }, options.map(([v, label]) => h('button', { class: `tab ${value === v ? 'active' : ''}`, onclick: () => onchange(v) }, label)));
 }
 
-const TRACK_SHORT = { sql: 'SQL', python: 'Python', stats: 'Estatística', db: 'Bancos de Dados' };
+const TRACK_SHORT = { sql: 'SQL', python: 'Python', stats: 'Estatística', db: 'Bancos de Dados', tableau: 'Tableau' };
 
 function viewProfile() {
   const s = store.getState();

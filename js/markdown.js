@@ -38,6 +38,7 @@ function splitRow(line) {
 }
 
 export function highlight(code, lang) {
+  if (lang === 'tableau') return highlightTableau(code);
   const kw = lang === 'sql'
     ? /\b(SELECT|FROM|WHERE|AND|OR|NOT|IN|IS|NULL|AS|ON|JOIN|INNER|LEFT|RIGHT|FULL|OUTER|CROSS|GROUP|BY|ORDER|HAVING|LIMIT|OFFSET|DISTINCT|CASE|WHEN|THEN|ELSE|END|WITH|RECURSIVE|UNION|ALL|INSERT|INTO|VALUES|UPDATE|SET|DELETE|CREATE|TABLE|VIEW|INDEX|PRIMARY|KEY|REFERENCES|DEFAULT|CHECK|BETWEEN|LIKE|EXISTS|OVER|PARTITION|ROWS|PRECEDING|FOLLOWING|CURRENT|ROW|UNBOUNDED|ASC|DESC|BEGIN|COMMIT|ROLLBACK|EXPLAIN|QUERY|PLAN|INTERVAL|INTERSECT|EXCEPT|ANALYZE)\b/g
     : /\b(import|from|as|def|return|if|elif|else|for|while|in|not|and|or|is|None|True|False|try|except|finally|raise|with|lambda|class|pass|break|continue|yield|print)\b/g;
@@ -107,4 +108,24 @@ export function renderMarkdown(src) {
     }
   }
   return html;
+}
+
+
+// Destaque para a linguagem de cálculos do Tableau: palavras-chave, funções, [campos], textos e // comentários.
+function highlightTableau(code) {
+  const re = /(\/\/[^\n]*)|("(?:[^"]|"")*"|'(?:[^']|'')*')|(\[[^\]]*\])|(#[^#\n]*#)/g;
+  const kw = /\b(IF|THEN|ELSEIF|ELSE|END|CASE|WHEN|AND|OR|NOT|IN|FIXED|INCLUDE|EXCLUDE|TRUE|FALSE|NULL)\b/gi;
+  const plain = (s) => esc(s)
+    .replace(kw, '<span class="tk-kw">$1</span>')
+    .replace(/\b([A-Z_]{2,})(?=\()/g, '<span class="tk-fn">$1</span>')
+    .replace(/\b(\d+(?:\.\d+)?)\b/g, '<span class="tk-num">$1</span>');
+  let out = ''; let last = 0; let m;
+  while ((m = re.exec(code))) {
+    out += plain(code.slice(last, m.index));
+    if (m[1]) out += `<span class="tk-com">${esc(m[1])}</span>`;
+    else if (m[2] || m[4]) out += `<span class="tk-str">${esc(m[2] || m[4])}</span>`;
+    else out += `<span class="tk-field">${esc(m[3])}</span>`;
+    last = re.lastIndex;
+  }
+  return out + plain(code.slice(last));
 }

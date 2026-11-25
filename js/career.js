@@ -65,7 +65,7 @@ export function careerInfo(pts = 0) {
 
 // ───────────── Cargo por trilha
 // Cada trilha tem a sua escada, medida pela fração dos pontos da trilha que você estudou.
-export const TRACK_ROLE = { sql: 'SQL', python: 'Python para dados', stats: 'Estatística', db: 'Bancos de Dados' };
+export const TRACK_ROLE = { sql: 'SQL', python: 'Python para dados', stats: 'Estatística', db: 'Bancos de Dados', tableau: 'Tableau' };
 export const TRACK_RANKS = [
   { pct: 0, title: 'Estagiário' },
   { pct: 8, title: 'Júnior I' },

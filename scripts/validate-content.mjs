@@ -30,7 +30,7 @@ for (const course of COURSES) {
             break;
           case 'example':
             if (!step.title || !step.code) errors.push(`${where}: exemplo sem título/código`);
-            if (step.lang === 'pg') { /* validado em validate-pg.mjs */ } else if (step.lang === 'sql') {
+            if (step.lang === 'pg' || step.lang === 'tableau') { /* validados em validate-pg.mjs e validate-tableau.mjs */ } else if (step.lang === 'sql') {
               const db = createDb(SQL);
               try { const r = db.exec(step.code); if (!r.length || !r[r.length - 1].values.length) errors.push(`${where}: exemplo SQL sem resultado`); }
               catch (e) { errors.push(`${where}: exemplo SQL com erro: ${e.message}`); }
@@ -56,6 +56,9 @@ for (const course of COURSES) {
             checkSql(step, where);
             (step.variants || []).forEach((v, k) => checkSql({ ...step, ...v }, `${where} variação ${k + 1}`));
             break;
+          case 'tableau':
+            if (!step.solution || !step.prompt) errors.push(`${where}: exercício de Tableau sem enunciado/solução`);
+            break; // execução validada em validate-tableau.mjs
           case 'python':
             pySteps.push({ where, setup: step.setup, solution: step.solution, starter: step.starter, tests: step.tests });
             break;

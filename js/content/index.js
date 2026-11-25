@@ -2,6 +2,7 @@ import { SQL_COURSE } from './sql-course.js';
 import { PYTHON_COURSE } from './python-course.js';
 import { STATS_COURSE } from './stats-course.js';
 import { DB_COURSE } from './db-course.js';
+import { TABLEAU_COURSE } from './tableau-course.js';
 import { SQL_THEORY } from './theory-sql.js';
 import { PY_THEORY } from './theory-python.js';
 import { STATS_THEORY } from './theory-stats.js';
@@ -10,7 +11,7 @@ import { PY_PLUS } from './py-plus.js';
 import { STATS_PLUS } from './stats-plus.js';
 import { organizarEstatistica } from './stats/organizar.js';
 
-export const COURSES = [SQL_COURSE, PYTHON_COURSE, STATS_COURSE, DB_COURSE];
+export const COURSES = [SQL_COURSE, PYTHON_COURSE, STATS_COURSE, DB_COURSE, TABLEAU_COURSE];
 
 // Teoria antes da prática: os cards de aprofundamento entram logo depois da teoria
 // de abertura da lição, antes do primeiro exercício. Um card com { before: n } entra
@@ -93,6 +94,7 @@ export const TRACK_LEVELS = [
 const LEVEL_NAMES = {
   db: { 1: 'Fundamentos', 2: 'SQL profissional', 3: 'Avançado', 4: 'Especialista', 5: 'Arquitetura' },
   stats: { 1: 'Descritiva', 2: 'Probabilidade', 3: 'Inferência e A/B', 4: 'Modelagem', 5: 'Sênior' },
+  tableau: { 1: 'Leigo', 2: 'Básico', 3: 'Intermediário', 4: 'Avançado', 5: 'Master' },
 };
 export const levelName = (courseId, levelId) => LEVEL_NAMES[courseId]?.[levelId] || TRACK_LEVELS.find((l) => l.id === levelId)?.name || `Nível ${levelId}`;
 
@@ -101,6 +103,7 @@ export const LEVEL_DESC = {
   python: { 1: 'Python essencial e NumPy', 2: 'pandas: seleção, agregação, junção e limpeza', 3: 'Séries temporais, visualização, extração de dados e estatística', 4: 'Desempenho, dados maiores que a memória e código de produção' },
   db: { 1: 'SGBD, ACID, modelagem, chaves, tipos, normalização e integridade', 2: 'SQL profissional: DML, junções, agregações avançadas, tratamento de dados e JSONB', 3: 'CTEs, window functions, objetos programáveis, MVCC, isolamento e locks', 4: 'Internals, índices, EXPLAIN, particionamento, backup, replicação e segurança', 5: 'OLAP, modelagem dimensional, NoSQL, vetores, cloud e migrations' },
   stats: { 1: 'Ler, limpar e resumir dados sem distorções: medidas robustas, gráficos, outliers, faltantes e armadilhas', 2: 'Probabilidade, Bayes, distribuições (inclusive caudas longas), TLC, amostragem e Monte Carlo', 3: 'Intervalos, testes de hipótese, não paramétricos, poder, CUPED e testes A/B em produção', 4: 'Correlação, regressão e diagnóstico, logística, GLMs, seleção de modelos e previsão de séries', 5: 'Inferência causal, bayesiana hierárquica, sobrevivência (Cox), multivariada e métricas de negócio' },
+  tableau: { 1: 'Fundamentos de BI, ecossistema, interface e primeiros gráficos', 2: 'Pílulas azuis e verdes, agregação, datas, campos calculados, filtros e dashboards', 3: 'Ordem de operações, modelagem, LOD, cálculos de tabela, parâmetros, ações e Prep', 4: 'Densificação, gráficos customizados, espacial, estatística, TabPy, performance e governança', 5: 'Arquitetura enterprise, APIs, embedding, CI/CD, CoE e analytics agêntico' },
 };
 
 export const levelOfLesson = (lessonId) => {
@@ -126,7 +129,7 @@ for (const course of COURSES) {
   }
 }
 
-const EXERCISE = new Set(['quiz', 'order', 'fill', 'sql', 'python']);
+const EXERCISE = new Set(['quiz', 'order', 'fill', 'sql', 'python', 'tableau']);
 
 /** Encontra o exercício de uma lição a partir da referência guardada no progresso. */
 export function stepByRef(lessonId, ref) {

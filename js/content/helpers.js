@@ -58,3 +58,19 @@ export const py = (prompt, solution, tests, opts = {}) =>
 export const pgsql = (prompt, solution, opts = {}) => ({ ...sql(prompt, solution, opts), engine: 'pg', allowEmpty: !!opts.allowEmpty });
 export const debugPg = (prompt, buggy, solution, opts = {}) => pgsql(prompt, solution, { ...opts, starter: buggy, kind: 'debug' });
 export const exPg = (title, md, code, after = '') => example(title, md, 'pg', code, after);
+
+// ───────── Tableau (trilha de Tableau): campos calculados avaliados pelo motor do app
+// opts: { dims: ['Categoria'] | 'linha', nome, campos: {Nome: 'expr'}, filtro: {expr, contexto}, particao: [...], mostrar: [...], usuario, starter, hint }
+export const tab = (prompt, solution, opts = {}) => ({
+  type: 'tableau', prompt, solution: solution.trim(), starter: opts.starter ?? '', hint: opts.hint ?? '', kind: opts.kind ?? null,
+  nome: opts.nome || 'Cálculo', dims: opts.dims ?? [], campos: opts.campos || {}, filtro: opts.filtro || null,
+  particao: opts.particao || [], mostrar: opts.mostrar || [], usuario: opts.usuario || null,
+  ordenar: opts.ordenar || null, filtroTabela: opts.filtroTabela || null,
+});
+export const debugTab = (prompt, buggy, solution, opts = {}) => tab(prompt, solution, { ...opts, starter: buggy, kind: 'debug' });
+export const exTab = (title, md, code, after = '', opts = {}) => ({
+  type: 'example', title, md, lang: 'tableau', code: code.trim(), after,
+  nome: opts.nome || 'Cálculo', dims: opts.dims ?? [], campos: opts.campos || {}, filtro: opts.filtro || null,
+  particao: opts.particao || [], mostrar: opts.mostrar || [], usuario: opts.usuario || null, setup: '', packages: [],
+  ordenar: opts.ordenar || null, filtroTabela: opts.filtroTabela || null,
+});

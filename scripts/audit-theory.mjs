@@ -30,6 +30,16 @@ function pyTermsIn(code) {
   return [...terms].filter((t) => !PY_IGNORE.has(t));
 }
 
+// Tableau: funções (SUM(, DATEDIFF(...) e palavras-chave estruturais do cálculo
+function tabTermsIn(code) {
+  const clean = String(code).replace(/"(?:[^"]|"")*"|'(?:[^']|'')*'/g, '""').replace(/\[[^\]]*\]/g, '[]');
+  const terms = new Set();
+  const KW = new Set(['IN', 'IF', 'AND', 'OR', 'NOT', 'THEN', 'ELSE', 'WHEN']);
+  for (const m of clean.matchAll(/\b([A-Za-z_]{2,})\s*\(/g)) if (!KW.has(m[1].toUpperCase())) terms.add(m[1].toUpperCase());
+  for (const m of clean.matchAll(/\b(ELSEIF|CASE|FIXED|INCLUDE|EXCLUDE|IIF)\b/gi)) terms.add(m[1].toUpperCase());
+  return [...terms];
+}
+
 function inTheory(term, theoryNorm, theoryUp) {
   if (/^[A-Z_ (|]+$/.test(term) || term === '||') return theoryUp.includes(term.toUpperCase());
   return theoryNorm.includes(norm(term));
@@ -41,7 +51,7 @@ const unescape = (s) => s.replace(/\\(.)/g, '$1');
 for (const course of COURSES) {
   // cada trilha acumula a sua teoria; Estatística herda a de Python (pré-requisito declarado)
   // SQL e Bancos de Dados começam do zero; Python herda nada; Estatística herda a teoria de Python
-  if (course.id === 'sql' || course.id === 'db') theoryText = '';
+  if (course.id === 'sql' || course.id === 'db' || course.id === 'tableau') theoryText = '';
   for (const unit of course.units) {
     for (const lesson of unit.lessons) {
       lesson.steps.forEach((step, i) => {
@@ -52,6 +62,7 @@ for (const course of COURSES) {
         let terms = [];
         if (step.type === 'sql') terms = sqlTermsIn(step.solution);
         else if (step.type === 'python') terms = pyTermsIn(step.solution);
+        else if (step.type === 'tableau') terms = tabTermsIn(step.solution);
         else if (step.type === 'quiz' || step.type === 'order' || step.type === 'fill') {
           const txt = [step.question, step.prompt, step.code, ...(step.options || []), ...(step.tokens || [])].filter(Boolean).join(' ');
           const backticks = [...txt.matchAll(/`([^`]+)`/g)].map((m) => m[1]);

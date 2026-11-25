@@ -31,6 +31,7 @@
   --c-python: #059669;
   --c-stats: #c2410c;
   --c-db: #6250d6;
+  --c-tableau: #b9530c;
   /* código */
   --code-bg: #f7f8fa;
   --tk-kw: #7c3aed;
@@ -78,6 +79,7 @@
     --c-python: #2ea883;
     --c-stats: #e06f36;
     --c-db: #9085e9;
+    --c-tableau: #f29a52;
     --code-bg: #0e1115;
     --tk-kw: #c4a5ff;
     --tk-str: #7ee0b0;
@@ -114,6 +116,7 @@
   --c-python: #2ea883;
   --c-stats: #e06f36;
   --c-db: #9085e9;
+  --c-tableau: #f29a52;
   --code-bg: #0e1115;
   --tk-kw: #c4a5ff;
   --tk-str: #7ee0b0;
@@ -304,6 +307,8 @@ pre.code code { background: none; border: none; padding: 0; font-size: inherit; 
 .tk-str { color: var(--tk-str); }
 .tk-num { color: var(--tk-num); }
 .tk-com { color: var(--tk-com); font-style: italic; }
+.tk-fn { color: var(--tk-num); }
+.tk-field { color: var(--c-tableau, #e97627); font-weight: 600; }
 .table-wrap { overflow-x: auto; max-width: 100%; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); }
 table { border-collapse: collapse; font-size: 0.88rem; width: 100%; }
 th, td { padding: 8px 12px; text-align: left; white-space: nowrap; border-bottom: 1px solid var(--line); font-variant-numeric: tabular-nums; }
@@ -549,3 +554,14 @@ details.panel ul { margin: 0; padding-left: 18px; display: flex; flex-direction:
 .role-card { display: flex; flex-direction: column; gap: 6px; padding: 14px; border: 1px solid var(--line); border-radius: var(--r); color: inherit; text-decoration: none; }
 .role-card:hover { border-color: var(--track); }
 .role-card strong { font-size: 1.1rem; }
+
+/* Exercícios de Tableau */
+.tab-scenario { display: grid; gap: 6px; padding: 10px 12px; border: 1px dashed var(--line); border-radius: 10px; background: color-mix(in srgb, var(--c-tableau) 6%, transparent); }
+.tab-scenario > div { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
+.tab-scenario > div > span { min-width: 120px; }
+.tab-scenario code { white-space: normal; word-break: break-word; }
+.tab-result th.tab-dim { color: var(--c-sql); }
+.tab-result th.tab-measure { color: var(--good); }
+.tab-bar-cell { position: relative; min-width: 150px; }
+.tab-bar { position: absolute; left: 0; top: 18%; bottom: 18%; border-radius: 3px; opacity: 0.28; }
+.tab-bar-cell .num { position: relative; }
