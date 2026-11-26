@@ -199,6 +199,34 @@ function buildStatsData() {
 }
 
 const STATS = buildStatsData();
+
+// 4) plataforma de experimentos (trilha de Experimentação): atribuições, exposições e pedidos
+function buildExpData() {
+  const rand = rng(2025);
+  const atrib = [], expo = [], pedidos = [];
+  const ts = (dia, min) => `2025-03-${String(dia).padStart(2, '0')} ${String(Math.floor(min / 60)).padStart(2, '0')}:${String(min % 60).padStart(2, '0')}:00`;
+  let pid = 1;
+  for (let u = 1; u <= 3000; u++) {
+    const variante = rand() < 0.5 ? 'controle' : 'tratamento';
+    const plataforma = ['ios', 'android', 'web'][rand() < 0.35 ? 0 : rand() < 0.6 ? 1 : 2];
+    const dia = 3 + Math.floor(rand() * 14);
+    const min = 360 + Math.floor(rand() * 900);
+    atrib.push([u, 'carrinho_v2', variante, plataforma, ts(dia, min)]);
+    // pedido ANTES de ver o carrinho (não pode contar para o experimento)
+    if (rand() < 0.08) pedidos.push([pid++, u, ts(dia, Math.max(0, min - 30 - Math.floor(rand() * 200))), r2(40 + rand() * 120)]);
+    if (rand() < 0.4) {
+      const t0 = min + 5 + Math.floor(rand() * 60);
+      expo.push([u, 'carrinho_v2', ts(dia, t0)]);
+      if (rand() < 0.35) expo.push([u, 'carrinho_v2', ts(dia, Math.min(1439, t0 + 20 + Math.floor(rand() * 90)))]);   // reexposição
+      const p = 0.18 + (variante === 'tratamento' ? 0.06 : 0);
+      if (rand() < p) pedidos.push([pid++, u, ts(dia, Math.min(1439, t0 + 3 + Math.floor(rand() * 40))), r2(Math.max(15, 85 + gauss(rand) * 35))]);
+    } else if (rand() < 0.03) {
+      pedidos.push([pid++, u, ts(dia, Math.min(1439, min + 10 + Math.floor(rand() * 300))), r2(Math.max(15, 85 + gauss(rand) * 35))]);  // comprou sem passar pelo carrinho novo
+    }
+  }
+  return { atrib, expo, pedidos };
+}
+const EXP = buildExpData();
 const sqlVal = (v) => (typeof v === 'string' ? `'${v}'` : String(v));
 const sqlRows = (rows) => rows.map((r) => `(${r.map(sqlVal).join(',')})`).join(',');
 const csv = (header, rows) => [header, ...rows.map((r) => r.join(','))].join('\n');
@@ -230,6 +258,27 @@ CREATE TABLE avaliacoes (
   data_avaliacao TEXT NOT NULL
 );
 INSERT INTO avaliacoes VALUES ${sqlRows(STATS.aval)};
+CREATE TABLE exp_atribuicoes (
+  usuario_id INTEGER PRIMARY KEY,
+  experimento TEXT NOT NULL,
+  variante TEXT NOT NULL,       -- 'controle' ou 'tratamento'
+  plataforma TEXT NOT NULL,
+  atribuido_em TEXT NOT NULL
+);
+INSERT INTO exp_atribuicoes VALUES ${sqlRows(EXP.atrib)};
+CREATE TABLE exp_exposicoes (
+  usuario_id INTEGER NOT NULL REFERENCES exp_atribuicoes(usuario_id),
+  experimento TEXT NOT NULL,
+  exposto_em TEXT NOT NULL      -- cada vez que o usuário abriu o carrinho
+);
+INSERT INTO exp_exposicoes VALUES ${sqlRows(EXP.expo)};
+CREATE TABLE exp_pedidos (
+  pedido_id INTEGER PRIMARY KEY,
+  usuario_id INTEGER NOT NULL REFERENCES exp_atribuicoes(usuario_id),
+  criado_em TEXT NOT NULL,
+  valor REAL NOT NULL
+);
+INSERT INTO exp_pedidos VALUES ${sqlRows(EXP.pedidos)};
 `;
 export const DB_SQL = LOJA_SQL + '\n' + STATS_SQL;
 
@@ -253,6 +302,9 @@ export const SCHEMA_DOC = [
   { tabela: 'experimento_ab', colunas: 'usuario_id, grupo (A/B), dispositivo, converteu (0/1), valor_compra, data_acesso — 2.000 linhas' },
   { tabela: 'vendas_diarias', colunas: 'data, loja (Centro/Shopping/Online), visitantes, pedidos, receita — 1.098 linhas (ano de 2024)' },
   { tabela: 'avaliacoes', colunas: 'id, produto_id → produtos.id, cliente_id → clientes.id, nota (1–5), data_avaliacao — 420 linhas' },
+  { tabela: 'exp_atribuicoes', colunas: 'usuario_id, experimento, variante (controle/tratamento), plataforma, atribuido_em — 3.000 linhas' },
+  { tabela: 'exp_exposicoes', colunas: 'usuario_id → exp_atribuicoes, experimento, exposto_em (uma linha por abertura do carrinho)' },
+  { tabela: 'exp_pedidos', colunas: 'pedido_id, usuario_id → exp_atribuicoes, criado_em, valor' },
 ];
 
 // Código Python reutilizado como "setup" nos exercícios de pandas.

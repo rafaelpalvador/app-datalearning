@@ -47,11 +47,16 @@ function inTheory(term, theoryNorm, theoryUp) {
 
 const report = [];
 let theoryText = '';
+let theoryAfterStats = '';
 const unescape = (s) => s.replace(/\\(.)/g, '$1');
+let prevCourse = null;
 for (const course of COURSES) {
+  if (prevCourse === 'stats') theoryAfterStats = theoryText;
+  prevCourse = course.id;
   // cada trilha acumula a sua teoria; Estatística herda a de Python (pré-requisito declarado)
   // SQL e Bancos de Dados começam do zero; Python herda nada; Estatística herda a teoria de Python
   if (course.id === 'sql' || course.id === 'db' || course.id === 'tableau') theoryText = '';
+  if (course.id === 'exp') theoryText = theoryAfterStats; // pré-requisitos declarados: Python e Estatística
   for (const unit of course.units) {
     for (const lesson of unit.lessons) {
       lesson.steps.forEach((step, i) => {

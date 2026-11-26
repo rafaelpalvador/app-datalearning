@@ -32,6 +32,7 @@
   --c-stats: #c2410c;
   --c-db: #6250d6;
   --c-tableau: #b9530c;
+  --c-exp: #0f766e;
   /* código */
   --code-bg: #f7f8fa;
   --tk-kw: #7c3aed;
@@ -80,6 +81,8 @@
     --c-stats: #e06f36;
     --c-db: #9085e9;
     --c-tableau: #f29a52;
+    --c-exp: #2bb3a3;
+  --c-exp: #2bb3a3;
     --code-bg: #0e1115;
     --tk-kw: #c4a5ff;
     --tk-str: #7ee0b0;
@@ -117,6 +120,7 @@
   --c-stats: #e06f36;
   --c-db: #9085e9;
   --c-tableau: #f29a52;
+  --c-exp: #2bb3a3;
   --code-bg: #0e1115;
   --tk-kw: #c4a5ff;
   --tk-str: #7ee0b0;

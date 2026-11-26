@@ -299,7 +299,7 @@ function viewHome() {
   page('home',
     h('div', { class: 'hello' },
       h('div', { class: 'page-head' }, h('span', { class: 'eyebrow' }, dateStr), h('h1', {}, s.xp === 0 ? 'Bem-vindo ao Datum' : 'Bom te ver de volta'),
-        h('p', { class: 'muted' }, 'SQL, Python, estatística, bancos de dados e Tableau: teoria completa, muita prática e correção na hora.')),
+        h('p', { class: 'muted' }, 'SQL, Python, estatística, bancos de dados, Tableau e experimentação: teoria completa, muita prática e correção na hora.')),
       h('div', { class: 'goal card flat', style: { padding: '12px 16px' } },
         h('div', { class: 'ring', style: { '--p': goalPct } }, h('span', {}, `${goalPct}%`)),
         h('div', {}, h('div', { class: 'small', style: { fontWeight: 600 } }, 'Meta do dia'), h('div', { class: 'small muted num' }, `${s.daily.xp} de ${s.dailyGoal} XP`))),
@@ -1614,7 +1614,7 @@ function segmented(options, value, onchange) {
   return h('div', { class: 'tabs' }, options.map(([v, label]) => h('button', { class: `tab ${value === v ? 'active' : ''}`, onclick: () => onchange(v) }, label)));
 }
 
-const TRACK_SHORT = { sql: 'SQL', python: 'Python', stats: 'Estatística', db: 'Bancos de Dados', tableau: 'Tableau' };
+const TRACK_SHORT = { sql: 'SQL', python: 'Python', stats: 'Estatística', db: 'Bancos de Dados', tableau: 'Tableau', exp: 'Experimentação' };
 
 function viewProfile() {
   const s = store.getState();
