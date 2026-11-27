@@ -14,32 +14,37 @@ import kotlin.math.min
 import kotlin.math.sin
 
 /**
- * Camada de tela cheia que não recebe toques: desenha a bolha na borda e a seta
- * que cresce na direção do gesto, com o nome da ação que vai ser executada.
+ * Camada de tela cheia que não recebe toques. Desenha, no estilo do "voltar" do Android,
+ * uma ondulação translúcida saindo da borda com uma setinha dentro apontando para a
+ * direção do gesto, e o nome da ação ao lado.
  */
 class GestureFeedbackView(context: Context) : View(context) {
 
     private val d = resources.displayMetrics.density
 
-    private val idleColor = 0xB3505860.toInt()
-    private val shortColor = 0xF02F80ED.toInt()
-    private val longColor = 0xF0F59E0B.toInt()
-
-    private val bubble = Paint(Paint.ANTI_ALIAS_FLAG)
+    private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.FILL
+        color = 0xB3202124.toInt()
+    }
+    private val outline = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        style = Paint.Style.STROKE
+        strokeWidth = 1.2f * d
+    }
     private val arrow = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = 0xFFFFFFFF.toInt()
         style = Paint.Style.STROKE
+        strokeWidth = 2.6f * d
         strokeCap = Paint.Cap.ROUND
         strokeJoin = Paint.Join.ROUND
     }
-    private val pillBg = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xE6202124.toInt() }
+    private val pillBg = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xCC202124.toInt() }
     private val text = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = 0xFFFFFFFF.toInt()
-        textSize = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, 15f, resources.displayMetrics)
+        textSize = TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, 14f, resources.displayMetrics)
         textAlign = Paint.Align.CENTER
-        isFakeBoldText = true
     }
-    private val path = Path()
+    private val bump = Path()
+    private val head = Path()
     private val pill = RectF()
     private val loc = IntArray(2)
 
@@ -78,7 +83,7 @@ class GestureFeedbackView(context: Context) : View(context) {
     }
 
     fun end() {
-        animate().alpha(0f).setDuration(180).withEndAction { visibility = GONE }.start()
+        animate().alpha(0f).setDuration(160).withEndAction { visibility = GONE }.start()
     }
 
     override fun onDraw(canvas: Canvas) {
@@ -87,26 +92,31 @@ class GestureFeedbackView(context: Context) : View(context) {
         getLocationOnScreen(loc)
         val dir = if (side == Side.LEFT) 1f else -1f
         val ox = if (side == Side.LEFT) 0f else width.toFloat()
-        val oy = startY - loc[1]
 
         val g = gesture
-        val progress = min(1f, dist / shortPx)
         val recognized = g != null && label != null
-        bubble.color = when {
-            !recognized -> idleColor
-            g!!.isLong -> longColor
-            else -> shortColor
-        }
+        val progress = min(1f, dist / shortPx)
 
-        // bolha (meio círculo) colada na borda
-        val r = (20 + 16 * progress) * d
-        canvas.drawCircle(ox, oy, r, bubble)
+        // a ondulação acompanha um pouco o dedo na vertical
+        val cy = (startY - loc[1] + dy * 0.35f).coerceIn(0f, height.toFloat())
+        val half = 100 * d // meia altura da ondulação
+        val bulge = (14 * d + min(dist, 160 * d) * 0.3f).coerceAtMost(62 * d) // quanto ela sai da borda
+        val px = ox + dir * bulge
 
-        // ângulo: encaixa no gesto reconhecido, senão segue o dedo
+        bump.reset()
+        bump.moveTo(ox, cy - half)
+        bump.cubicTo(ox, cy - half * 0.45f, px, cy - half * 0.42f, px, cy)
+        bump.cubicTo(px, cy + half * 0.42f, ox, cy + half * 0.45f, ox, cy + half)
+        bump.close()
+        canvas.drawPath(bump, fill)
+        outline.color = if (g?.isLong == true && recognized) 0xCCF59E0B.toInt() else 0x59FFFFFF
+        canvas.drawPath(bump, outline)
+
+        // setinha dentro da ondulação, na direção do gesto
         val deg = when (g) {
             Gesture.STRAIGHT_SHORT, Gesture.STRAIGHT_LONG -> 0.0
-            Gesture.DIAG_UP_SHORT, Gesture.DIAG_UP_LONG -> 40.0
-            Gesture.DIAG_DOWN_SHORT, Gesture.DIAG_DOWN_LONG -> -40.0
+            Gesture.DIAG_UP_SHORT, Gesture.DIAG_UP_LONG -> 45.0
+            Gesture.DIAG_DOWN_SHORT, Gesture.DIAG_DOWN_LONG -> -45.0
             Gesture.ALONG_UP -> 90.0
             Gesture.ALONG_DOWN -> -90.0
             null -> Math.toDegrees(atan2(-dy.toDouble(), inward.toDouble()))
@@ -114,51 +124,38 @@ class GestureFeedbackView(context: Context) : View(context) {
         val a = Math.toRadians(deg)
         val ux = (cos(a) * dir).toFloat()
         val uy = (-sin(a)).toFloat()
-
-        // a seta nasce um pouco para dentro da borda (nos gestos verticais fica ao lado da bolha)
-        val bx = ox + dir * (if (g == Gesture.ALONG_UP || g == Gesture.ALONG_DOWN) r + 8 * d else 10 * d)
-        val by = oy
-        val len = (18 * d + min(dist * 0.55f, 110 * d)) * (0.5f + 0.5f * progress)
-        val tx = bx + ux * len
-        val ty = by + uy * len
-
-        val long = g?.isLong == true
-        arrow.strokeWidth = (if (long) 6f else 4.5f) * d
-        arrow.alpha = if (recognized || g == null) 255 else 140
-        canvas.drawLine(bx, by, tx, ty, arrow)
+        val ax = ox + dir * bulge * 0.55f
+        val len = 9 * d * (0.6f + 0.4f * progress) // meio comprimento
+        val tx = ax + ux * len
+        val ty = cy + uy * len
+        arrow.alpha = if (recognized) 255 else 130
+        canvas.drawLine(ax - ux * len, cy - uy * len, tx, ty, arrow)
         drawHead(canvas, tx, ty, ux, uy)
-        if (long) drawHead(canvas, tx - ux * 11 * d, ty - uy * 11 * d, ux, uy)
 
-        // nome da ação
+        // nome da ação, discreto, ao lado da ondulação
         val name = label ?: return
         if (g == null) return
         val tw = text.measureText(name)
-        val padH = 12 * d
-        val h = 32 * d
-        var cx = tx + ux * (tw / 2 + 28 * d)
-        var cy = ty + uy * (h + 8 * d)
-        cx = cx.coerceIn(tw / 2 + padH + 8 * d, width - tw / 2 - padH - 8 * d)
-        cy = cy.coerceIn(h, height - h)
-        pill.set(cx - tw / 2 - padH, cy - h / 2, cx + tw / 2 + padH, cy + h / 2)
+        val padH = 10 * d
+        val h = 28 * d
+        var cx = ox + dir * (bulge + 14 * d + tw / 2 + padH)
+        cx = cx.coerceIn(tw / 2 + padH + 4 * d, width - tw / 2 - padH - 4 * d)
+        val py = cy.coerceIn(h, height - h)
+        pill.set(cx - tw / 2 - padH, py - h / 2, cx + tw / 2 + padH, py + h / 2)
         canvas.drawRoundRect(pill, h / 2, h / 2, pillBg)
-        canvas.drawText(name, cx, cy - (text.descent() + text.ascent()) / 2, text)
+        canvas.drawText(name, cx, py - (text.descent() + text.ascent()) / 2, text)
     }
 
     private fun drawHead(canvas: Canvas, x: Float, y: Float, ux: Float, uy: Float) {
-        val s = 12 * d
-        // duas "asas" a ±35° da direção, para trás
-        val c = 0.819f
-        val sn = 0.574f
+        val s = 7.5f * d
+        // duas "asas" a ±45° da direção, para trás
+        val c = 0.7071f
         val bx = -ux
         val by = -uy
-        val l1x = x + s * (bx * c - by * sn)
-        val l1y = y + s * (bx * sn + by * c)
-        val l2x = x + s * (bx * c + by * sn)
-        val l2y = y + s * (-bx * sn + by * c)
-        path.reset()
-        path.moveTo(l1x, l1y)
-        path.lineTo(x, y)
-        path.lineTo(l2x, l2y)
-        canvas.drawPath(path, arrow)
+        head.reset()
+        head.moveTo(x + s * (bx * c - by * c), y + s * (bx * c + by * c))
+        head.lineTo(x, y)
+        head.lineTo(x + s * (bx * c + by * c), y + s * (-bx * c + by * c))
+        canvas.drawPath(head, arrow)
     }
 }

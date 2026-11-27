@@ -353,7 +353,7 @@ private fun HandleSettings(cfg: Config, update: (Config) -> Unit) {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.outline,
             )
-            SwitchSetting("Mostrar a seta do gesto", cfg.showFeedback, { update(cfg.copy(showFeedback = it)) }, subtitle = "Seta saindo da borda com o nome da ação, como na Samsung")
+            SwitchSetting("Mostrar a seta do gesto", cfg.showFeedback, { update(cfg.copy(showFeedback = it)) }, subtitle = "Ondulação com setinha saindo da borda, como o voltar do Android")
             SwitchSetting(
                 "Vibrar",
                 cfg.haptic,

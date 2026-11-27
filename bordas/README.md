@@ -25,7 +25,7 @@ assistente de voz, **escanear QR code**, **abrir qualquer app**, **abrir uma tel
 ## Ajustes
 
 Posição vertical, altura e largura da alça, distância mínima do gesto, distância do gesto longo, visibilidade da alça
-(0% = transparente), seta animada saindo da borda com o nome da ação (como na Samsung), vibração, mostrar o nome do gesto (para aprender) e funcionar ou não na horizontal.
+(0% = transparente), ondulação com setinha saindo da borda (estilo do voltar do Android) e o nome da ação, vibração, mostrar o nome do gesto (para aprender) e funcionar ou não na horizontal.
 
 ## Instalação
 
