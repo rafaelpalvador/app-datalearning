@@ -111,7 +111,7 @@ export function styleStatusBar(dark) {
   const sb = plugin('StatusBar');
   if (!sb) return;
   sb.setStyle({ style: dark ? 'DARK' : 'LIGHT' }).catch(() => {});
-  sb.setBackgroundColor({ color: dark ? '#131f24' : '#ffffff' }).catch(() => {});
+  sb.setBackgroundColor({ color: dark ? '#171a21' : '#ffffff' }).catch(() => {});
 }
 
 // ───────────── copiar texto (backup)

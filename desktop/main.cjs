@@ -40,7 +40,7 @@ function createWindow() {
     minHeight: 600,
     title: 'Datum',
     icon: path.join(ROOT, 'assets', 'icon.png'),
-    backgroundColor: nativeTheme.shouldUseDarkColors ? '#0b0d10' : '#f4f5f7',
+    backgroundColor: '#0f1115',
     autoHideMenuBar: true,
     show: false,
     webPreferences: {

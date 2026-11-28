@@ -54,7 +54,7 @@ function defaults() {
     topics: {},        // courseId -> { correct, answered } (estatísticas por trilha)
     daily: freshDaily(),
     reminder: { enabled: false, hour: 19, minute: 0 },
-    settings: { sound: true, haptics: true, theme: 'system' },
+    settings: { sound: true, haptics: true, theme: 'dark', themeV2: true },
     tutor: { provider: '', keys: {}, models: {}, baseUrls: {} },
     syncCfg: { token: '', gistId: '', login: '', lastSync: 0, syncPrefs: true }, // sincronização via GitHub (fica só no aparelho)
     prefsAt: 0,        // quando as preferências mudaram (vale a mais recente entre aparelhos)
@@ -95,6 +95,8 @@ export function getState() {
       solutions: saved.solutions || {},
       topics: saved.topics || {},
     };
+    // redesign 2.5: o tema escuro passa a ser o padrão (quem estava em "Sistema" vai para o escuro uma vez)
+    if (!state.settings.themeV2) { if (state.settings.theme === 'system') state.settings.theme = 'dark'; state.settings.themeV2 = true; }
     // limpeza de campos de versões anteriores (ofensiva, vidas, gemas)
     for (const k of ['streak', 'bestStreak', 'freezes', 'lastActiveDay', 'hearts', 'heartsUpdatedAt', 'gems', 'frozeNotice', 'todayXp', 'todayDay']) delete state[k];
   } catch {

@@ -67,10 +67,9 @@ const norm = (s) => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCa
 
 // ─────────────────────────────────────────── tema, feedback, toasts, diálogos
 function applyTheme() {
-  const t = store.getState().settings.theme;
-  if (t === 'light' || t === 'dark') document.documentElement.dataset.theme = t;
-  else if (!IS_DEMO) delete document.documentElement.dataset.theme;
-  const dark = t === 'dark' || (t !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  const t = store.getState().settings.theme || 'dark';
+  document.documentElement.dataset.theme = t;
+  const dark = t === 'dark' || (t === 'system' && !window.matchMedia('(prefers-color-scheme: light)').matches);
   platform.styleStatusBar(dark);
 }
 
@@ -199,9 +198,24 @@ const NAV = [
   { id: 'profile', href: '#/perfil', icon: 'user', label: 'Perfil' },
 ];
 
+// Símbolo "Sinal": um eixo com um ponto de dado subindo (a curva em ciano só aparece no tamanho grande).
+export function logoSvg(curva = false) {
+  return `<svg viewBox="0 0 64 64" aria-hidden="true"><rect class="lg-bg" width="64" height="64" rx="15"/><path class="lg-axis" d="M16 14 V48 H50" stroke-width="${curva ? 4 : 5}"/>${curva ? '<path class="lg-curve" d="M22 42 C30 40 33 26 43 21" stroke-width="4"/>' : ''}<circle class="lg-dot" cx="45" cy="20" r="${curva ? 6 : 7}"/></svg>`;
+}
+const wordmark = () => h('span', { class: 'brand-name' }, APP_NAME.toLowerCase(), h('span', { class: 'accent-dot' }, '.'));
+
 function brand() {
   return h('a', { class: 'brand', href: '#/', 'aria-label': `${APP_NAME}, início` },
-    h('span', { class: 'brand-mark' }, ic('chart', 18)), h('span', { class: 'brand-name' }, APP_NAME));
+    h('span', { class: 'brand-mark', html: logoSvg() }), wordmark());
+}
+
+// Trilhas no menu lateral, como pastas de um projeto (estilo editor de código)
+const TRACK_DIR = { sql: 'sql/', python: 'python/', stats: 'estatistica/', db: 'postgres/', tableau: 'tableau/', exp: 'experimentos/' };
+function sideTracks() {
+  const s = store.getState();
+  return h('div', { class: 'side-tracks' }, h('span', { class: 'eyebrow' }, 'Trilhas'),
+    COURSES.map((c) => h('a', { href: `#/curso/${c.id}`, class: location.hash.startsWith(`#/curso/${c.id}`) ? 'active' : '', title: c.title },
+      h('span', {}, TRACK_DIR[c.id] || `${c.id}/`), h('span', { class: 'pct' }, `${trackCareer(s, c.id).pct}%`))));
 }
 
 function levelMini() {
@@ -221,6 +235,7 @@ function sidebar(active) {
     brand(),
     h('nav', { class: 'nav', 'aria-label': 'Navegação principal' }, NAV.map((n) => h('a', { href: n.href, class: n.id === active ? 'active' : '' },
       ic(n.icon, 19), n.label, n.id === 'practice' && due ? h('span', { class: 'badge brand' }, due) : null))),
+    sideTracks(),
     levelMini(),
   );
 }
@@ -267,7 +282,7 @@ function missionsCard() {
     h('div', { class: 'card-title' }, h('h3', {}, 'Missões de hoje'), h('span', { class: 'tiny faint' }, `+${MISSION_REWARD} XP cada`)),
     dailyMissions().map((m) => h('div', { class: `mission ${m.done ? 'done' : ''}` },
       h('span', { class: 'm-icon' }, ic(m.done ? 'check' : m.icon, 16)),
-      h('div', {}, h('div', { class: 'small', style: { fontWeight: 600 } }, m.text), h('div', { class: 'progress' }, h('div', { class: 'bar', style: { width: `${pct(m.value, m.target)}%`, background: m.done ? 'var(--good)' : 'var(--ink)' } }))),
+      h('div', {}, h('div', { class: 'small', style: { fontWeight: 600 } }, m.text), h('div', { class: 'progress' }, h('div', { class: 'bar', style: { width: `${pct(m.value, m.target)}%`, background: m.done ? 'var(--good)' : 'var(--accent)' } }))),
       h('span', { class: 'tiny faint num' }, `${m.value}/${m.target}`),
     )),
   );
@@ -298,7 +313,7 @@ function viewHome() {
 
   page('home',
     h('div', { class: 'hello' },
-      h('div', { class: 'page-head' }, h('span', { class: 'eyebrow' }, dateStr), h('h1', {}, s.xp === 0 ? 'Bem-vindo ao Datum' : 'Bom te ver de volta'),
+      h('div', { class: 'page-head' }, h('span', { class: 'eyebrow' }, `// ${dateStr}`), h('h1', {}, s.xp === 0 ? 'Bem-vindo ao Datum' : 'Bom te ver de volta', h('span', { class: 'accent-dot' }, '.')),
         h('p', { class: 'muted' }, 'SQL, Python, estatística, bancos de dados, Tableau e experimentação: teoria completa, muita prática e correção na hora.')),
       h('div', { class: 'goal card flat', style: { padding: '12px 16px' } },
         h('div', { class: 'ring', style: { '--p': goalPct } }, h('span', {}, `${goalPct}%`)),
@@ -1687,7 +1702,7 @@ function viewProfile() {
     h('section', { class: 'card' },
       h('div', { class: 'card-title' }, h('h3', {}, 'Preferências')),
       h('div', { class: 'settings' },
-        settingRow('Tema', null, segmented([['system', 'Sistema'], ['light', 'Claro'], ['dark', 'Escuro']], s.settings.theme, (v) => { store.setSetting('theme', v); applyTheme(); viewProfile(); })),
+        settingRow('Tema', null, segmented([['dark', 'Escuro'], ['light', 'Claro'], ['system', 'Sistema']], s.settings.theme, (v) => { store.setSetting('theme', v); applyTheme(); viewProfile(); })),
         settingRow('Meta diária', 'XP por dia', segmented([[10, '10'], [30, '30'], [50, '50'], [100, '100']], s.dailyGoal, (v) => { store.setDailyGoal(v); viewProfile(); })),
         settingRow('Sons', 'Toque curto ao acertar e errar', toggle('set-sound', 'Sons', s.settings.sound, (v) => store.setSetting('sound', v))),
         settingRow('Vibração', 'No celular', toggle('set-haptics', 'Vibração', s.settings.haptics, (v) => store.setSetting('haptics', v))),

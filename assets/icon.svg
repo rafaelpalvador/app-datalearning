@@ -1,14 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
-  <defs>
-    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
-      <stop offset="0" stop-color="#1b222b"/><stop offset="1" stop-color="#0d1116"/>
-    </linearGradient>
-  </defs>
-  <rect width="1024" height="1024" rx="232" fill="url(#bg)"/>
-  <g>
-    <rect x="266" y="560" width="128" height="214" rx="40" fill="#e9edf2"/>
-    <rect x="448" y="420" width="128" height="354" rx="40" fill="#e9edf2"/>
-    <rect x="630" y="470" width="128" height="304" rx="40" fill="#e9edf2" opacity="0.55"/>
-    <circle cx="694" cy="318" r="70" fill="#2dd4bf"/>
-  </g>
+  <!-- Datum · símbolo "Sinal": um eixo com um ponto de dado subindo -->
+  <rect width="1024" height="1024" rx="232" fill="#16181d"/>
+  <path d="M256 224 V768 H800" fill="none" stroke="#f6f5f1" stroke-width="68" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M352 672 C480 640 528 416 688 336" fill="none" stroke="#3dd6c1" stroke-width="60" stroke-linecap="round"/>
+  <circle cx="720" cy="320" r="100" fill="#f26b1d"/>
 </svg>
